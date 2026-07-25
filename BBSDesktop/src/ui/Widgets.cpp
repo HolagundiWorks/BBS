@@ -70,6 +70,16 @@ static LRESULT CALLBACK btnSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, U
 
 HWND createButton(HWND parent, int id, const std::wstring& text, ButtonKind kind,
                   const std::wstring& glyph) {
+    // Prefer native themed push-buttons (Fluent via visual styles). Owner-draw only for glyph icons.
+    if (glyph.empty()) {
+        DWORD style = WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON;
+        if (kind == ButtonKind::Primary) style |= BS_DEFPUSHBUTTON;
+        HWND b = CreateWindowExW(0, L"BUTTON", text.c_str(), style, 0, 0, 0, 0, parent,
+                                 (HMENU)(INT_PTR)id, GetModuleHandleW(nullptr), nullptr);
+        SendMessageW(b, WM_SETFONT, (WPARAM)theme().fBody, TRUE);
+        SetWindowTheme(b, theme().c.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+        return b;
+    }
     HWND b = CreateWindowExW(0, L"BUTTON", text.c_str(),
                              WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 0, 0, 0, 0, parent,
                              (HMENU)(INT_PTR)id, GetModuleHandleW(nullptr), nullptr);
@@ -165,11 +175,20 @@ void paintButton(const DRAWITEMSTRUCT* dis) {
 // ------------------------------ Edit field ------------------------------
 
 HWND createEdit(HWND parent, int id, const std::wstring& text) {
-    HWND e = CreateWindowExW(0, L"EDIT", text.c_str(),
+    HWND e = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", text.c_str(),
                              WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, 0, 0, 0, 0, parent,
                              (HMENU)(INT_PTR)id, GetModuleHandleW(nullptr), nullptr);
     SendMessageW(e, WM_SETFONT, (WPARAM)theme().fBody, TRUE);
+    SetWindowTheme(e, theme().c.dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
     return e;
+}
+
+HWND createStatic(HWND parent, int id, const std::wstring& text, bool bold) {
+    HWND s = CreateWindowExW(0, L"STATIC", text.c_str(),
+                             WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX, 0, 0, 0, 0, parent,
+                             (HMENU)(INT_PTR)id, GetModuleHandleW(nullptr), nullptr);
+    SendMessageW(s, WM_SETFONT, (WPARAM)(bold ? theme().fBodyStrong : theme().fCaption), TRUE);
+    return s;
 }
 
 void paintFieldContainer(Graphics& g, RECT fieldRect, bool focused) {

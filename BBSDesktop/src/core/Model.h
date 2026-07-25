@@ -111,16 +111,24 @@ struct SlabInput {
     double span_x = 0, span_y = 0, thickness = 0, cover = 0;
     std::string concrete_grade = "M25", steel_grade = "Fe415", slab_type = "Two-Way";
     double dia_x = 0, spacing_x = 0, dia_y = 0, spacing_y = 0;
+    // Bent-up / crank (IS 2502 practice): extra ≈ rise * √(1+0.42²) per crank.
+    int crank_count = 0;       // typically 0 or 2
+    double crank_rise = 0;     // 0 → thickness − 2·cover
     std::vector<ExtraFixed> extra_fixed;
     std::vector<ExtraMesh> extra_mesh;  // length + spacing; count uses span_y as orthogonal
 };
 
 struct FootingInput {
     std::string mark;
-    std::string footing_type = "Isolated";  // Isolated | Double | Strip | Raft
+    std::string footing_type = "Isolated";  // Isolated | Double | Strip | Raft | Stepped
     double length_l = 0, width_b = 0, col_dim_l = 0, col_dim_b = 0, depth = 0, cover = 0;
     // Double footing: second column footprint (optional).
     double col2_dim_l = 0, col2_dim_b = 0;
+    // Stepped: bottom plan = L×B; top plan defaults to column dims; equal setbacks.
+    int n_steps = 0;             // number of risers (≥1)
+    double step_height = 0;      // 0 → depth / n_steps
+    double top_length = 0;       // 0 → col_dim_l
+    double top_width = 0;        // 0 → col_dim_b
     std::string concrete_grade = "M25", steel_grade = "Fe500";
     double dia_l = 0, spacing_l = 0, dia_b = 0, spacing_b = 0;  // bottom mesh
     double top_dia_l = 0, top_spacing_l = 0, top_dia_b = 0, top_spacing_b = 0;  // optional top

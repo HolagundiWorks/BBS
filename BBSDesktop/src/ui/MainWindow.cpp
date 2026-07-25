@@ -29,29 +29,26 @@ static TextStyle ts(int px, int weight, Color c) { return TextStyle{theme().dp(p
 
 // ------------------------------ element configs ------------------------------
 
-static FieldSpec dia(const char* key, const wchar_t* label, const wchar_t* def, int span,
-                     bool optional = false) {
-    FieldSpec f;
-    f.key = key; f.label = label; f.kind = FieldSpec::Dia; f.def = def; f.colspan = span;
-    f.optionalDia = optional;
-    return f;
-}
-
 static ElementConfig columnsConfig() {
     ElementConfig c;
     c.navLabel = L"Columns"; c.glyph = L""; c.key = "columns";
-    c.title = L"Columns"; c.subtitle = L"Ties + longitudinal bars for rectangular, circular and spiral columns.";
+    c.title = L"Columns";
+    c.subtitle = L"Ties and longitudinal bars — rectangular, circular and spiral.";
     c.fields = {
-        {"mark", L"Mark", FieldSpec::Text, {}, L"C1", 2},
-        {"width", L"Width (mm)", FieldSpec::Text, {}, L"300", 2},
-        {"depth", L"Depth (mm)", FieldSpec::Text, {}, L"450", 2},
-        {"height", L"Height (mm)", FieldSpec::Text, {}, L"3200", 3},
-        {"cover", L"Cover (mm)", FieldSpec::Text, {}, L"40", 3},
-        dia("stirrup_dia", L"Tie Ø (mm)", L"8", 2),
-        {"spacing", L"Tie spacing (mm)", FieldSpec::Text, {}, L"150", 3},
-        {"hook_angle", L"Hook (°)", FieldSpec::Combo, {L"90", L"135", L"180"}, L"135", 2},
-        {"tie_type", L"Tie type", FieldSpec::Combo, {L"Closed", L"Double Tie", L"Circular", L"Spiral"}, L"Closed", 5},
-        {"bars", L"Longitudinal bars  (dia:qty, comma-separated)", FieldSpec::Text, {}, L"12:4, 16:2, 20:4", 12},
+        section(L"Identity"),
+        textF("mark", L"Mark", L"C1", 3),
+        section(L"Geometry"),
+        textF("width", L"Width (mm)", L"300", 3),
+        textF("depth", L"Depth (mm)", L"450", 3),
+        textF("height", L"Height (mm)", L"3200", 3),
+        textF("cover", L"Cover (mm)", L"40", 3),
+        section(L"Ties"),
+        diaF("stirrup_dia", L"Tie Ø (mm)", L"8", 3),
+        textF("spacing", L"Tie spacing (mm)", L"150", 3),
+        comboF("hook_angle", L"Hook (°)", {L"90", L"135", L"180"}, L"135", 3),
+        comboF("tie_type", L"Tie type", {L"Closed", L"Double Tie", L"Circular", L"Spiral"}, L"Closed", 3),
+        section(L"Longitudinal bars"),
+        textF("bars", L"Bars (dia:qty, comma-separated)", L"12:4, 16:2, 20:4", 12),
     };
     c.inputCols = {{L"Mark", 60}, {L"W", 55, true}, {L"D", 55, true}, {L"H", 66, true}, {L"Bars", 150}};
     c.inputKeys = {"mark", "width", "depth", "height", "bars"};
@@ -68,45 +65,33 @@ static ElementConfig beamsConfig() {
     ElementConfig c;
     c.navLabel = L"Beams"; c.glyph = L""; c.key = "beams";
     c.title = L"Beams";
-    c.subtitle = L"Stirrups, flexural bars, up to 3 extra / span-% sets, skin (IS 456 Cl. 26.5.1.3).";
+    c.subtitle = L"Stirrups, flexural bars, extras, skin (IS 456 Cl. 26.5.1.3).";
     c.fields = {
-        {"mark", L"Mark", FieldSpec::Text, {}, L"B1", 2},
-        {"span", L"Span (mm)", FieldSpec::Text, {}, L"4000", 2},
-        {"width", L"Width (mm)", FieldSpec::Text, {}, L"230", 2},
-        {"depth", L"Depth (mm)", FieldSpec::Text, {}, L"450", 2},
-        {"cover", L"Cover (mm)", FieldSpec::Text, {}, L"25", 2},
-        {"concrete_grade", L"Concrete", FieldSpec::Combo, {L"M20", L"M25", L"M30", L"M35", L"M40"}, L"M25", 2},
-        {"steel_grade", L"Steel", FieldSpec::Combo, {L"Fe415", L"Fe500", L"Fe550"}, L"Fe500", 2},
-        dia("stirrup_dia", L"Stirrup Ø", L"8", 2),
-        {"spacing_support", L"Sp. support", FieldSpec::Text, {}, L"100", 2},
-        {"spacing_middle", L"Sp. mid", FieldSpec::Text, {}, L"150", 2},
-        {"legs", L"Legs", FieldSpec::Combo, {L"2", L"4"}, L"2", 1},
-        {"hook_angle", L"Hook", FieldSpec::Combo, {L"90", L"135", L"180"}, L"135", 1},
-        {"top_bar_type", L"Top bar type", FieldSpec::Combo, {L"At Support", L"Full Span"}, L"At Support", 3},
-        {"top_bars", L"Top bars (dia:qty)", FieldSpec::Text, {}, L"16:2", 4},
-        {"bottom_bars", L"Bottom bars (dia:qty)", FieldSpec::Text, {}, L"16:3, 20:2", 5},
-        // Extra fixed — up to 3 diameter sets
-        dia("ex1_dia", L"Extra1 Ø", L"", 2, true),
-        {"ex1_nos", L"Extra1 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex1_len", L"Extra1 length", FieldSpec::Text, {}, L"", 2},
-        dia("ex2_dia", L"Extra2 Ø", L"", 2, true),
-        {"ex2_nos", L"Extra2 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex2_len", L"Extra2 length", FieldSpec::Text, {}, L"", 2},
-        dia("ex3_dia", L"Extra3 Ø", L"", 2, true),
-        {"ex3_nos", L"Extra3 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex3_len", L"Extra3 length", FieldSpec::Text, {}, L"", 2},
-        // Extra span-% — up to 3
-        dia("esp1_dia", L"Span%1 Ø", L"", 2, true),
-        {"esp1_nos", L"Span%1 nos", FieldSpec::Text, {}, L"", 2},
-        {"esp1_frac", L"Span%1 frac", FieldSpec::Text, {}, L"", 2},
-        dia("esp2_dia", L"Span%2 Ø", L"", 2, true),
-        {"esp2_nos", L"Span%2 nos", FieldSpec::Text, {}, L"", 2},
-        {"esp2_frac", L"Span%2 frac", FieldSpec::Text, {}, L"", 2},
-        dia("esp3_dia", L"Span%3 Ø", L"", 2, true),
-        {"esp3_nos", L"Span%3 nos", FieldSpec::Text, {}, L"", 2},
-        {"esp3_frac", L"Span%3 frac", FieldSpec::Text, {}, L"", 2},
-        dia("skin_dia", L"Skin Ø (mm)", L"", 3, true),
-        {"skin_spacing", L"Skin spacing", FieldSpec::Text, {}, L"", 3},
+        section(L"Identity & geometry"),
+        textF("mark", L"Mark", L"B1", 2),
+        textF("span", L"Span (mm)", L"4000", 2),
+        textF("width", L"Width (mm)", L"230", 2),
+        textF("depth", L"Depth (mm)", L"450", 2),
+        textF("cover", L"Cover (mm)", L"25", 2),
+        comboF("concrete_grade", L"Concrete", {L"M20", L"M25", L"M30", L"M35", L"M40"}, L"M25", 2),
+        comboF("steel_grade", L"Steel", {L"Fe415", L"Fe500", L"Fe550"}, L"Fe500", 2),
+        section(L"Stirrups"),
+        diaF("stirrup_dia", L"Stirrup Ø", L"8", 2),
+        textF("spacing_support", L"Spacing at support", L"100", 3),
+        textF("spacing_middle", L"Spacing at mid", L"150", 3),
+        comboF("legs", L"Legs", {L"2", L"4"}, L"2", 2),
+        comboF("hook_angle", L"Hook", {L"90", L"135", L"180"}, L"135", 2),
+        section(L"Flexural bars"),
+        comboF("top_bar_type", L"Top bar type", {L"At Support", L"Full Span"}, L"At Support", 3),
+        textF("top_bars", L"Top bars (dia:qty)", L"16:2", 4),
+        textF("bottom_bars", L"Bottom bars (dia:qty)", L"16:3, 20:2", 5),
+        section(L"Side face (skin) — when depth > 750 mm"),
+        diaF("skin_dia", L"Skin Ø (mm)", L"", 3, true),
+        textF("skin_spacing", L"Skin spacing (mm)", L"", 3),
+    };
+    c.extraPanels = {
+        {ExtraPanelKind::Fixed, L"Extra bars (fixed length)", "extra_fixed"},
+        {ExtraPanelKind::SpanFrac, L"Extra bars (fraction of span)", "extra_span"},
     };
     c.inputCols = {{L"Mark", 60}, {L"Span", 66, true}, {L"W", 50, true}, {L"D", 50, true}, {L"Top", 90}, {L"Bottom", 110}};
     c.inputKeys = {"mark", "span", "width", "depth", "top_bars", "bottom_bars"};
@@ -126,38 +111,34 @@ static ElementConfig beamsConfig() {
 static ElementConfig slabsConfig() {
     ElementConfig c;
     c.navLabel = L"Slabs"; c.glyph = L""; c.key = "slabs";
-    c.title = L"Slabs"; c.subtitle = L"One-way / two-way mesh plus up to 3 extra bar sets and 3 mesh extras.";
+    c.title = L"Slabs";
+    c.subtitle = L"One-way / two-way mesh, crank length (IS 2502), and extras.";
+    c.typeKey = "slab_type";
     c.fields = {
-        {"mark", L"Mark", FieldSpec::Text, {}, L"S1", 2},
-        {"span_x", L"Span X (mm)", FieldSpec::Text, {}, L"3000", 2},
-        {"span_y", L"Span Y (mm)", FieldSpec::Text, {}, L"4500", 2},
-        {"thickness", L"Thickness (mm)", FieldSpec::Text, {}, L"125", 2},
-        {"cover", L"Cover (mm)", FieldSpec::Text, {}, L"20", 2},
-        {"slab_type", L"Type", FieldSpec::Combo, {L"One-Way", L"Two-Way"}, L"Two-Way", 2},
-        {"concrete_grade", L"Concrete", FieldSpec::Combo, {L"M20", L"M25", L"M30", L"M35", L"M40"}, L"M25", 3},
-        {"steel_grade", L"Steel", FieldSpec::Combo, {L"Fe250", L"Fe415", L"Fe500", L"Fe550"}, L"Fe415", 3},
-        dia("dia_x", L"Bar Ø-X", L"10", 3),
-        {"spacing_x", L"Spacing-X", FieldSpec::Text, {}, L"150", 3},
-        dia("dia_y", L"Bar Ø-Y", L"10", 3),
-        {"spacing_y", L"Spacing-Y", FieldSpec::Text, {}, L"150", 3},
-        dia("ex1_dia", L"Extra1 Ø", L"", 2, true),
-        {"ex1_nos", L"Extra1 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex1_len", L"Extra1 length", FieldSpec::Text, {}, L"", 2},
-        dia("ex2_dia", L"Extra2 Ø", L"", 2, true),
-        {"ex2_nos", L"Extra2 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex2_len", L"Extra2 length", FieldSpec::Text, {}, L"", 2},
-        dia("ex3_dia", L"Extra3 Ø", L"", 2, true),
-        {"ex3_nos", L"Extra3 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex3_len", L"Extra3 length", FieldSpec::Text, {}, L"", 2},
-        dia("em1_dia", L"Mesh1 Ø", L"", 2, true),
-        {"em1_len", L"Mesh1 length", FieldSpec::Text, {}, L"", 2},
-        {"em1_sp", L"Mesh1 spacing", FieldSpec::Text, {}, L"", 2},
-        dia("em2_dia", L"Mesh2 Ø", L"", 2, true),
-        {"em2_len", L"Mesh2 length", FieldSpec::Text, {}, L"", 2},
-        {"em2_sp", L"Mesh2 spacing", FieldSpec::Text, {}, L"", 2},
-        dia("em3_dia", L"Mesh3 Ø", L"", 2, true),
-        {"em3_len", L"Mesh3 length", FieldSpec::Text, {}, L"", 2},
-        {"em3_sp", L"Mesh3 spacing", FieldSpec::Text, {}, L"", 2},
+        section(L"Identity & type"),
+        textF("mark", L"Mark", L"S1", 3),
+        comboF("slab_type", L"Slab type", {L"One-Way", L"Two-Way"}, L"Two-Way", 3),
+        comboF("concrete_grade", L"Concrete", {L"M20", L"M25", L"M30", L"M35", L"M40"}, L"M25", 3),
+        comboF("steel_grade", L"Steel", {L"Fe250", L"Fe415", L"Fe500", L"Fe550"}, L"Fe415", 3),
+        section(L"Geometry"),
+        textF("span_x", L"Span X (mm)", L"3000", 3),
+        textF("span_y", L"Span Y (mm)", L"4500", 3),
+        textF("thickness", L"Thickness (mm)", L"125", 3),
+        textF("cover", L"Cover (mm)", L"20", 3),
+        section(L"Main reinforcement — X"),
+        diaF("dia_x", L"Bar Ø-X", L"10", 3),
+        textF("spacing_x", L"Spacing-X (mm)", L"150", 3),
+        when(section(L"Main bars — Y (two-way)"), "slab_type", {L"Two-Way"}),
+        when(section(L"Distribution bars — Y (one-way)"), "slab_type", {L"One-Way"}),
+        diaF("dia_y", L"Bar Ø-Y", L"10", 3),
+        textF("spacing_y", L"Spacing-Y (mm)", L"150", 3),
+        when(section(L"Crank / bent-up on main bars (IS 2502)"), "slab_type", {L"One-Way", L"Two-Way"}),
+        comboF("crank_count", L"Cranks per bar", {L"0", L"1", L"2"}, L"0", 3),
+        textF("crank_rise", L"Crank rise (mm, blank = t−2c)", L"", 5),
+    };
+    c.extraPanels = {
+        {ExtraPanelKind::Fixed, L"Extra bars (fixed length)", "extra_fixed"},
+        {ExtraPanelKind::Mesh, L"Extra mesh (length × spacing)", "extra_mesh"},
     };
     c.inputCols = {{L"Mark", 60}, {L"Span X", 66, true}, {L"Span Y", 66, true}, {L"Thick", 56, true}, {L"Type", 84}};
     c.inputKeys = {"mark", "span_x", "span_y", "thickness", "slab_type"};
@@ -170,7 +151,8 @@ static ElementConfig slabsConfig() {
     c.generate = computeSlabs;
     c.seed = {{{"mark", "S1"}, {"span_x", "3000"}, {"span_y", "4500"}, {"thickness", "125"}, {"cover", "20"},
                {"slab_type", "Two-Way"}, {"concrete_grade", "M25"}, {"steel_grade", "Fe415"},
-               {"dia_x", "10"}, {"spacing_x", "150"}, {"dia_y", "10"}, {"spacing_y", "150"}}};
+               {"dia_x", "10"}, {"spacing_x", "150"}, {"dia_y", "10"}, {"spacing_y", "150"},
+               {"crank_count", "0"}}};
     return c;
 }
 
@@ -178,37 +160,44 @@ static ElementConfig footingsConfig() {
     ElementConfig c;
     c.navLabel = L"Footings"; c.glyph = L""; c.key = "footings";
     c.title = L"Footings";
-    c.subtitle = L"Isolated, double, strip and raft — quantity mesh + IS 456 Cl. 34 checks.";
+    c.subtitle = L"Isolated, stepped, double, strip and raft — inputs follow footing type.";
+    c.typeKey = "footing_type";
     c.fields = {
-        {"mark", L"Mark", FieldSpec::Text, {}, L"F1", 2},
-        {"footing_type", L"Type", FieldSpec::Combo, {L"Isolated", L"Double", L"Strip", L"Raft"}, L"Isolated", 3},
-        {"length_l", L"Length L (mm)", FieldSpec::Text, {}, L"2000", 2},
-        {"width_b", L"Width B (mm)", FieldSpec::Text, {}, L"2000", 2},
-        {"depth", L"Depth (mm)", FieldSpec::Text, {}, L"500", 2},
-        {"cover", L"Cover (mm)", FieldSpec::Text, {}, L"50", 2},
-        {"col_dim_l", L"Col dim-L", FieldSpec::Text, {}, L"400", 2},
-        {"col_dim_b", L"Col dim-B", FieldSpec::Text, {}, L"400", 2},
-        {"col2_dim_l", L"Col2 dim-L", FieldSpec::Text, {}, L"", 2},
-        {"col2_dim_b", L"Col2 dim-B", FieldSpec::Text, {}, L"", 2},
-        {"concrete_grade", L"Concrete", FieldSpec::Combo, {L"M20", L"M25", L"M30", L"M35", L"M40"}, L"M25", 3},
-        {"steel_grade", L"Steel", FieldSpec::Combo, {L"Fe415", L"Fe500", L"Fe550"}, L"Fe500", 3},
-        dia("dia_l", L"Bottom Ø-L", L"12", 2),
-        {"spacing_l", L"Bottom sp-L", FieldSpec::Text, {}, L"150", 2},
-        dia("dia_b", L"Bottom Ø-B", L"12", 2),
-        {"spacing_b", L"Bottom sp-B", FieldSpec::Text, {}, L"150", 2},
-        dia("top_dia_l", L"Top Ø-L", L"", 2, true),
-        {"top_spacing_l", L"Top sp-L", FieldSpec::Text, {}, L"", 2},
-        dia("top_dia_b", L"Top Ø-B", L"", 2, true),
-        {"top_spacing_b", L"Top sp-B", FieldSpec::Text, {}, L"", 2},
-        dia("ex1_dia", L"Extra1 Ø", L"", 2, true),
-        {"ex1_nos", L"Extra1 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex1_len", L"Extra1 length", FieldSpec::Text, {}, L"", 2},
-        dia("ex2_dia", L"Extra2 Ø", L"", 2, true),
-        {"ex2_nos", L"Extra2 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex2_len", L"Extra2 length", FieldSpec::Text, {}, L"", 2},
-        dia("ex3_dia", L"Extra3 Ø", L"", 2, true),
-        {"ex3_nos", L"Extra3 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex3_len", L"Extra3 length", FieldSpec::Text, {}, L"", 2},
+        section(L"Identity & type"),
+        textF("mark", L"Mark", L"F1", 3),
+        comboF("footing_type", L"Footing type",
+               {L"Isolated", L"Stepped", L"Double", L"Strip", L"Raft"}, L"Isolated", 4),
+        comboF("concrete_grade", L"Concrete", {L"M20", L"M25", L"M30", L"M35", L"M40"}, L"M25", 3),
+        comboF("steel_grade", L"Steel", {L"Fe415", L"Fe500", L"Fe550"}, L"Fe500", 2),
+        section(L"Plan & depth"),
+        textF("length_l", L"Length L (mm)", L"2000", 3),
+        textF("width_b", L"Width B (mm)", L"2000", 3),
+        textF("depth", L"Depth (mm)", L"500", 3),
+        textF("cover", L"Cover (mm)", L"50", 3),
+        when(section(L"Column on footing"), "footing_type", {L"Isolated", L"Stepped", L"Double"}),
+        when(textF("col_dim_l", L"Column dim-L", L"400", 3), "footing_type", {L"Isolated", L"Stepped", L"Double"}),
+        when(textF("col_dim_b", L"Column dim-B", L"400", 3), "footing_type", {L"Isolated", L"Stepped", L"Double"}),
+        when(section(L"Second column (double footing)"), "footing_type", {L"Double"}),
+        when(textF("col2_dim_l", L"Col2 dim-L", L"", 3), "footing_type", {L"Double"}),
+        when(textF("col2_dim_b", L"Col2 dim-B", L"", 3), "footing_type", {L"Double"}),
+        when(section(L"Stepped arrangement"), "footing_type", {L"Stepped"}),
+        when(textF("n_steps", L"Number of steps", L"2", 3), "footing_type", {L"Stepped"}),
+        when(textF("step_height", L"Step height (mm, blank = D/n)", L"", 4), "footing_type", {L"Stepped"}),
+        when(textF("top_length", L"Top plan L (mm, blank = col)", L"", 3), "footing_type", {L"Stepped"}),
+        when(textF("top_width", L"Top plan B (mm, blank = col)", L"", 3), "footing_type", {L"Stepped"}),
+        section(L"Bottom mesh"),
+        diaF("dia_l", L"Bottom Ø-L", L"12", 3),
+        textF("spacing_l", L"Bottom spacing-L", L"150", 3),
+        diaF("dia_b", L"Bottom Ø-B", L"12", 3),
+        textF("spacing_b", L"Bottom spacing-B", L"150", 3),
+        when(section(L"Top mesh (optional)"), "footing_type", {L"Isolated", L"Double", L"Strip", L"Raft", L"Stepped"}),
+        diaF("top_dia_l", L"Top Ø-L", L"", 3, true),
+        textF("top_spacing_l", L"Top spacing-L", L"", 3),
+        diaF("top_dia_b", L"Top Ø-B", L"", 3, true),
+        textF("top_spacing_b", L"Top spacing-B", L"", 3),
+    };
+    c.extraPanels = {
+        {ExtraPanelKind::Fixed, L"Extra bars (fixed length)", "extra_fixed"},
     };
     c.inputCols = {{L"Mark", 50}, {L"Type", 70}, {L"L", 60, true}, {L"B", 60, true}, {L"Depth", 60, true}};
     c.inputKeys = {"mark", "footing_type", "length_l", "width_b", "depth"};
@@ -231,42 +220,42 @@ static ElementConfig wallsConfig() {
     ElementConfig c;
     c.navLabel = L"Walls"; c.glyph = L""; c.key = "walls";
     c.title = L"Retaining walls";
-    c.subtitle = L"Stem and base mesh — toe footing optional. Tension face is user-selected.";
+    c.subtitle = L"Stem and base mesh — toe optional. Tension face is user-selected.";
+    c.typeKey = "include_toe";
     c.fields = {
-        {"mark", L"Mark", FieldSpec::Text, {}, L"RW1", 2},
-        {"wall_length", L"Wall length (mm)", FieldSpec::Text, {}, L"5000", 3},
-        {"stem_h", L"Stem H (mm)", FieldSpec::Text, {}, L"3000", 2},
-        {"stem_t", L"Stem thick (mm)", FieldSpec::Text, {}, L"250", 2},
-        {"heel", L"Heel (mm)", FieldSpec::Text, {}, L"1500", 2},
-        {"include_toe", L"Include toe", FieldSpec::Combo, {L"Yes", L"No"}, L"Yes", 2},
-        {"toe", L"Toe (mm)", FieldSpec::Text, {}, L"600", 2},
-        {"base_t", L"Base thick (mm)", FieldSpec::Text, {}, L"400", 2},
-        {"cover", L"Cover (mm)", FieldSpec::Text, {}, L"50", 2},
-        {"concrete_grade", L"Concrete", FieldSpec::Combo, {L"M20", L"M25", L"M30", L"M35", L"M40"}, L"M25", 2},
-        {"steel_grade", L"Steel", FieldSpec::Combo, {L"Fe415", L"Fe500", L"Fe550"}, L"Fe500", 2},
-        {"tension_face", L"Tension face", FieldSpec::Combo, {L"Front", L"Back"}, L"Front", 2},
-        dia("stem_v_dia", L"Stem V Ø", L"12", 2),
-        {"stem_v_spacing", L"Stem V spacing", FieldSpec::Text, {}, L"150", 2},
-        dia("stem_v_back_dia", L"Other face Ø", L"10", 2, true),
-        {"stem_v_back_spacing", L"Other face sp.", FieldSpec::Text, {}, L"200", 2},
-        dia("stem_h_dia", L"Stem H Ø", L"10", 2),
-        {"stem_h_spacing", L"Stem H spacing", FieldSpec::Text, {}, L"200", 2},
-        dia("base_l_dia", L"Base long Ø", L"12", 2),
-        {"base_l_spacing", L"Base long sp.", FieldSpec::Text, {}, L"150", 2},
-        dia("base_b_dia", L"Base trans Ø", L"12", 2),
-        {"base_b_spacing", L"Base trans sp.", FieldSpec::Text, {}, L"150", 2},
-        dia("link_dia", L"Link Ø", L"", 2, true),
-        {"link_spacing", L"Link spacing", FieldSpec::Text, {}, L"", 2},
-        {"link_legs", L"Link legs", FieldSpec::Combo, {L"2", L"4"}, L"2", 2},
-        dia("ex1_dia", L"Extra1 Ø", L"", 2, true),
-        {"ex1_nos", L"Extra1 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex1_len", L"Extra1 length", FieldSpec::Text, {}, L"", 2},
-        dia("ex2_dia", L"Extra2 Ø", L"", 2, true),
-        {"ex2_nos", L"Extra2 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex2_len", L"Extra2 length", FieldSpec::Text, {}, L"", 2},
-        dia("ex3_dia", L"Extra3 Ø", L"", 2, true),
-        {"ex3_nos", L"Extra3 nos", FieldSpec::Text, {}, L"", 2},
-        {"ex3_len", L"Extra3 length", FieldSpec::Text, {}, L"", 2},
+        section(L"Identity & geometry"),
+        textF("mark", L"Mark", L"RW1", 2),
+        textF("wall_length", L"Wall length (mm)", L"5000", 3),
+        textF("stem_h", L"Stem H (mm)", L"3000", 2),
+        textF("stem_t", L"Stem thick (mm)", L"250", 2),
+        textF("heel", L"Heel (mm)", L"1500", 2),
+        comboF("include_toe", L"Include toe", {L"Yes", L"No"}, L"Yes", 2),
+        when(textF("toe", L"Toe (mm)", L"600", 2), "include_toe", {L"Yes"}),
+        textF("base_t", L"Base thick (mm)", L"400", 2),
+        textF("cover", L"Cover (mm)", L"50", 2),
+        section(L"Materials & tension face"),
+        comboF("concrete_grade", L"Concrete", {L"M20", L"M25", L"M30", L"M35", L"M40"}, L"M25", 3),
+        comboF("steel_grade", L"Steel", {L"Fe415", L"Fe500", L"Fe550"}, L"Fe500", 3),
+        comboF("tension_face", L"Tension face", {L"Front", L"Back"}, L"Front", 3),
+        section(L"Stem reinforcement"),
+        diaF("stem_v_dia", L"Stem V Ø", L"12", 3),
+        textF("stem_v_spacing", L"Stem V spacing", L"150", 3),
+        diaF("stem_v_back_dia", L"Other face Ø", L"10", 3, true),
+        textF("stem_v_back_spacing", L"Other face spacing", L"200", 3),
+        diaF("stem_h_dia", L"Stem H Ø", L"10", 3),
+        textF("stem_h_spacing", L"Stem H spacing", L"200", 3),
+        section(L"Base reinforcement"),
+        diaF("base_l_dia", L"Base long Ø", L"12", 3),
+        textF("base_l_spacing", L"Base long spacing", L"150", 3),
+        diaF("base_b_dia", L"Base trans Ø", L"12", 3),
+        textF("base_b_spacing", L"Base trans spacing", L"150", 3),
+        section(L"Links (optional)"),
+        diaF("link_dia", L"Link Ø", L"", 3, true),
+        textF("link_spacing", L"Link spacing", L"", 3),
+        comboF("link_legs", L"Link legs", {L"2", L"4"}, L"2", 3),
+    };
+    c.extraPanels = {
+        {ExtraPanelKind::Fixed, L"Extra bars (fixed length)", "extra_fixed"},
     };
     c.inputCols = {{L"Mark", 50}, {L"Length", 70, true}, {L"Stem H", 70, true}, {L"Stem t", 60, true}};
     c.inputKeys = {"mark", "wall_length", "stem_h", "stem_t"};

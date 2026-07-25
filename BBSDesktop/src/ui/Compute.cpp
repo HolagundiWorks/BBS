@@ -129,6 +129,8 @@ GenResult computeSlabs(const std::vector<bbs::RawRow>& rows, const bbs::Settings
         sl.slab_type = to_str(r, "slab_type", "Two-Way");
         sl.dia_x = to_float(r, "dia_x"); sl.spacing_x = to_float(r, "spacing_x");
         sl.dia_y = to_float(r, "dia_y"); sl.spacing_y = to_float(r, "spacing_y");
+        sl.crank_count = to_int(r, "crank_count", 0);
+        sl.crank_rise = to_float(r, "crank_rise");
         sl.extra_fixed = collect_extra_fixed(r);
         sl.extra_mesh = collect_extra_mesh(r);
         in.push_back(sl);
@@ -154,6 +156,10 @@ GenResult computeFootings(const std::vector<bbs::RawRow>& rows, const bbs::Setti
         f.length_l = to_float(r, "length_l"); f.width_b = to_float(r, "width_b");
         f.col_dim_l = to_float(r, "col_dim_l"); f.col_dim_b = to_float(r, "col_dim_b");
         f.col2_dim_l = to_float(r, "col2_dim_l"); f.col2_dim_b = to_float(r, "col2_dim_b");
+        f.n_steps = to_int(r, "n_steps", 0);
+        f.step_height = to_float(r, "step_height");
+        f.top_length = to_float(r, "top_length");
+        f.top_width = to_float(r, "top_width");
         f.depth = to_float(r, "depth"); f.cover = to_float(r, "cover");
         f.concrete_grade = to_str(r, "concrete_grade", "M25");
         f.steel_grade = to_str(r, "steel_grade", "Fe500");

@@ -70,7 +70,7 @@ int main() {
     auto br2 = generate_beam_bbs({b2}, s);
     expect(!br2.notes.empty(), "skin note when depth>750 and no skin");
 
-    // ---- Slabs extras ----
+    // ---- Slabs extras + crank ----
     SlabInput sl;
     sl.mark = "S1"; sl.span_x = 3000; sl.span_y = 4500; sl.thickness = 125; sl.cover = 20;
     sl.concrete_grade = "M25"; sl.steel_grade = "Fe415"; sl.slab_type = "Two-Way";
@@ -82,6 +82,18 @@ int main() {
     for (const auto& e : slr.entries) if (e.bar_role == "Extra-Mesh") has_mesh = true;
     expect(has_mesh, "slab extra-mesh present");
 
+    SlabInput slc = sl; slc.mark = "S2"; slc.crank_count = 2; slc.extra_fixed.clear(); slc.extra_mesh.clear();
+    auto slcr = generate_slab_bbs({slc}, s);
+    double rise = 125 - 2 * 20;
+    double crank = 2 * rise * std::sqrt(1.0 + 0.42 * 0.42);
+    double base_x = 0;
+    for (const auto& e : slr.entries)
+        if (e.mark == "S1" && e.bar_role == "Main-X") base_x = e.length_mm;
+    double crank_x = 0;
+    for (const auto& e : slcr.entries)
+        if (e.bar_role == "Main-X") crank_x = e.length_mm;
+    expect_near(crank_x - base_x, crank, "slab crank adds rise*√(1+0.42²)*count");
+
     // ---- Footing types ----
     FootingInput f;
     f.mark = "F1"; f.footing_type = "Isolated";
@@ -91,6 +103,15 @@ int main() {
     auto fr = generate_footing_bbs({f}, s);
     expect(!fr.checks.empty() && fr.checks[0].status_minsteel_l.size() > 0, "footing min-steel status set");
     expect(fr.entries.size() == 2, "isolated footing 2 mesh lines");
+
+    FootingInput fs = f; fs.mark = "FS"; fs.footing_type = "Stepped"; fs.n_steps = 2; fs.step_height = 250;
+    auto fsr = generate_footing_bbs({fs}, s);
+    bool has_vert = false, has_top = false;
+    for (const auto& e : fsr.entries) {
+        if (e.bar_role.find("Step-Vert") != std::string::npos) has_vert = true;
+        if (e.bar_role == "Top-L" || e.bar_role == "Top-B") has_top = true;
+    }
+    expect(has_vert && has_top, "stepped footing has vert + top mesh");
 
     FootingInput raft = f; raft.footing_type = "Raft"; raft.mark = "R1";
     raft.top_dia_l = 10; raft.top_spacing_l = 200; raft.top_dia_b = 10; raft.top_spacing_b = 200;

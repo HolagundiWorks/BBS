@@ -199,20 +199,33 @@ BeamResult generate_beam_bbs(const std::vector<BeamInput>& rows, const Settings&
 
 // ============================================================ SLABS
 
+// IS 2502 / common BBS: crank allowance ≈ rise × √(1 + 0.42²) per crank.
+static double crank_allowance(double rise, int count) {
+    if (count <= 0 || rise <= 0) return 0.0;
+    return count * rise * std::sqrt(1.0 + 0.42 * 0.42);
+}
+
 SlabResult generate_slab_bbs(const std::vector<SlabInput>& rows, const Settings& s) {
     std::vector<BarEntry> entries;
     std::vector<SlabCheck> checks;
     for (const auto& row : rows) {
         if (!(row.span_x && row.span_y && row.thickness)) continue;
 
-        double len_x = row.span_x + 2 * s.development_length(row.dia_x, row.concrete_grade, row.steel_grade);
+        double rise = row.crank_rise > 0 ? row.crank_rise
+                                         : std::max(0.0, row.thickness - 2 * row.cover);
+        double crank_x = crank_allowance(rise, row.crank_count);
+
+        double len_x = row.span_x + 2 * s.development_length(row.dia_x, row.concrete_grade, row.steel_grade)
+                       + crank_x;
         int count_x = spacing_count(row.span_y, row.spacing_x);
         push_bar(entries, "Slab", row.mark, "Main-X", row.dia_x, len_x, count_x);
 
         double len_y;
         std::string role_y;
         if (row.slab_type == "Two-Way") {
-            len_y = row.span_y + 2 * s.development_length(row.dia_y, row.concrete_grade, row.steel_grade);
+            double crank_y = crank_allowance(rise, row.crank_count);
+            len_y = row.span_y + 2 * s.development_length(row.dia_y, row.concrete_grade, row.steel_grade)
+                    + crank_y;
             role_y = "Main-Y";
         } else {
             len_y = row.span_y - 2 * row.cover;
@@ -272,22 +285,69 @@ FootingResult generate_footing_bbs(const std::vector<FootingInput>& rows, const 
         if (!(row.length_l && row.width_b && row.depth)) continue;
         std::string type = row.footing_type.empty() ? "Isolated" : row.footing_type;
 
+        // Bottom mesh always covers the full plan.
         footing_mesh(entries, row.mark, row.length_l, row.width_b, row.cover,
                      row.dia_l, row.spacing_l, row.dia_b, row.spacing_b, "Main-L", "Main-B");
 
-        // Optional top mesh (Double / Raft / any type when entered).
-        if (row.top_dia_l > 0 || row.top_dia_b > 0) {
-            footing_mesh(entries, row.mark, row.length_l, row.width_b, row.cover,
+        double top_l = row.top_length > 0 ? row.top_length : row.col_dim_l;
+        double top_b = row.top_width > 0 ? row.top_width : row.col_dim_b;
+
+        // Stepped: bottom mat; intermediate landings at equal setbacks; vert bars = h + Ld.
+        if (type == "Stepped" && row.n_steps >= 1) {
+            int n = row.n_steps;
+            double sh = row.step_height > 0 ? row.step_height : (row.depth / std::max(1, n));
+            if (top_l <= 0) top_l = row.col_dim_l > 0 ? row.col_dim_l : row.length_l * 0.4;
+            if (top_b <= 0) top_b = row.col_dim_b > 0 ? row.col_dim_b : row.width_b * 0.4;
+            double set_l = (row.length_l - top_l) / (2.0 * n);
+            double set_b = (row.width_b - top_b) / (2.0 * n);
+            double ld_step_l = s.development_length(row.dia_l, row.concrete_grade, row.steel_grade);
+            double ld_step_b = s.development_length(row.dia_b, row.concrete_grade, row.steel_grade);
+
+            for (int i = 1; i < n; ++i) {
+                double Li = row.length_l - 2.0 * i * set_l;
+                double Bi = row.width_b - 2.0 * i * set_b;
+                if (Li > 2 * row.cover && Bi > 2 * row.cover) {
+                    footing_mesh(entries, row.mark, Li, Bi, row.cover,
+                                 row.dia_l, row.spacing_l, row.dia_b, row.spacing_b,
+                                 "Step-L", "Step-B");
+                }
+            }
+            for (int i = 0; i < n; ++i) {
+                double Li = row.length_l - 2.0 * i * set_l;
+                double Bi = row.width_b - 2.0 * i * set_b;
+                if (row.dia_l > 0 && row.spacing_l > 0 && Bi > 0) {
+                    int nos = 2 * spacing_count(Bi, row.spacing_l);
+                    push_bar(entries, "Footing", row.mark, "Step-Vert-L", row.dia_l, sh + ld_step_l, nos);
+                }
+                if (row.dia_b > 0 && row.spacing_b > 0 && Li > 0) {
+                    int nos = 2 * spacing_count(Li, row.spacing_b);
+                    push_bar(entries, "Footing", row.mark, "Step-Vert-B", row.dia_b, sh + ld_step_b, nos);
+                }
+            }
+            if (row.top_dia_l > 0 || row.top_dia_b > 0) {
+                footing_mesh(entries, row.mark, top_l, top_b, row.cover,
+                             row.top_dia_l, row.top_spacing_l, row.top_dia_b, row.top_spacing_b,
+                             "Top-L", "Top-B");
+            } else if (top_l > 0 && top_b > 0) {
+                footing_mesh(entries, row.mark, top_l, top_b, row.cover,
+                             row.dia_l, row.spacing_l, row.dia_b, row.spacing_b,
+                             "Top-L", "Top-B");
+            }
+        } else if (row.top_dia_l > 0 || row.top_dia_b > 0) {
+            double mesh_l = (type == "Raft" || type == "Strip") ? row.length_l
+                            : (top_l > 0 ? top_l : row.length_l);
+            double mesh_b = (type == "Raft" || type == "Strip") ? row.width_b
+                            : (top_b > 0 ? top_b : row.width_b);
+            footing_mesh(entries, row.mark, mesh_l, mesh_b, row.cover,
                          row.top_dia_l, row.top_spacing_l, row.top_dia_b, row.top_spacing_b,
                          "Top-L", "Top-B");
         }
 
         push_extras_fixed(entries, "Footing", row.mark, row.extra_fixed);
 
-        // Anchorage: isolated / double use column faces; strip/raft skip or use entered col dims if any.
-        double col_l = row.col_dim_l, col_b = row.col_dim_b;
+        double col_l = row.col_dim_l > 0 ? row.col_dim_l : top_l;
+        double col_b = row.col_dim_b > 0 ? row.col_dim_b : top_b;
         if (type == "Double" && row.col2_dim_l > 0) {
-            // Conservative: use the larger column for available embedment estimate.
             col_l = std::max(row.col_dim_l, row.col2_dim_l);
             col_b = std::max(row.col_dim_b, row.col2_dim_b);
         }
@@ -296,7 +356,7 @@ FootingResult generate_footing_bbs(const std::vector<FootingInput>& rows, const 
         double ld_b = s.development_length(row.dia_b, row.concrete_grade, row.steel_grade);
         double avail_l = 0, avail_b = 0;
         std::string anch_l = "N/A", anch_b = "N/A";
-        if (col_l > 0 && (type == "Isolated" || type == "Double")) {
+        if (col_l > 0 && (type == "Isolated" || type == "Double" || type == "Stepped")) {
             avail_l = (row.length_l - col_l) / 2 - row.cover;
             avail_b = (row.width_b - col_b) / 2 - row.cover;
             anch_l = avail_l >= ld_l ? "OK" : "Insufficient - add hook or rework";
@@ -324,7 +384,10 @@ FootingResult generate_footing_bbs(const std::vector<FootingInput>& rows, const 
         c.ast_provided_b = round2(apb);
         c.ast_min_b = round2(amin);
         c.status_minsteel_b = apb >= amin ? "OK" : "Increase steel / reduce spacing";
-        c.note = type + " — IS 456 Cl. 34 / Cl. 26.5.2.1";
+        if (type == "Stepped")
+            c.note = "Stepped — bottom mat; step mats + vert (h+Ld); IS 456 Cl. 34";
+        else
+            c.note = type + " — IS 456 Cl. 34 / Cl. 26.5.2.1";
         checks.push_back(c);
     }
     return {entries, summarize(entries), checks};
