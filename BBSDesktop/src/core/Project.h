@@ -11,7 +11,13 @@ namespace bbs {
 struct ProjectData {
     std::string name = "Untitled Project";
     Settings settings;
-    std::vector<RawRow> columns, beams, slabs, footings, walls;
+    std::vector<RawRow> columns, beams, slabs, footings, walls, stairs;
+    // Storey levels (slab-top to slab-top). Lvl0 = plinth.
+    struct Level {
+        std::string id, name;
+        double height_mm = 3000, slab_thickness_mm = 150, beam_depth_mm = 450;
+    };
+    std::vector<Level> levels;
 };
 
 bool save_project(const std::wstring& path, const ProjectData& data, std::string& err);

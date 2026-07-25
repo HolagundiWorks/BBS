@@ -1,0 +1,221 @@
+<Page
+    x:Class="BBSApp.Views.ElementPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:BBSApp.Controls"
+    Background="Transparent">
+
+    <Grid Style="{StaticResource PageRootStyle}"
+          Transitions="{StaticResource PageContentTransitions}"
+          RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- H1 page title — flat -->
+        <Grid>
+            <StackPanel Spacing="2" MaxWidth="720" HorizontalAlignment="Left">
+                <TextBlock x:Name="TitleText" Style="{StaticResource PageTitleStyle}"/>
+                <TextBlock x:Name="SubtitleText" Style="{StaticResource PageSubtitleStyle}"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button x:Name="GenerateBtn" Content="Generate BBS" Style="{StaticResource PrimaryButtonStyle}"
+                        Click="Generate_Click" AutomationProperties.Name="Generate"/>
+            </StackPanel>
+        </Grid>
+
+        <InfoBar x:Name="ErrorBar" Grid.Row="1" IsOpen="False"/>
+
+        <Pivot x:Name="MainPivot" Grid.Row="2">
+            <PivotItem Header="Entry">
+                <Grid Padding="0,10,0,0" RowSpacing="10" ColumnSpacing="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="240"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Sheet toolbar -->
+                    <Grid Grid.ColumnSpan="2" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <TextBlock Text="Sheet" Style="{StaticResource SectionHeaderStyle}" Margin="0"
+                                       VerticalAlignment="Center"/>
+                            <ComboBox x:Name="FloorCombo" MinWidth="140"
+                                      PlaceholderText="Floor"
+                                      SelectionChanged="FloorCombo_SelectionChanged"
+                                      AutomationProperties.Name="Floor filter"
+                                      ToolTipService.ToolTip="Show and edit rows for this floor only"/>
+                            <TextBlock x:Name="ClearHeightText" Style="{StaticResource CaptionSecondaryStyle}"
+                                       VerticalAlignment="Center" Visibility="Collapsed"/>
+                            <TextBlock x:Name="CountText" Style="{StaticResource CaptionSecondaryStyle}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock x:Name="EditHint" Grid.Column="1" VerticalAlignment="Center"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Text="Click a cell to type · Enter = next column · Enter twice = next row"/>
+                        <TextBlock x:Name="ComputedHint" Grid.Column="1" VerticalAlignment="Center"
+                                   Style="{StaticResource MetaTextStyle}"
+                                   Visibility="Collapsed"
+                                   Text="Formwork from RCC — edit Include column, then Save include or Refresh"/>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                            <Button x:Name="NewBtn" Content="Add row" Style="{StaticResource PrimaryButtonStyle}"
+                                    Click="New_Click" ToolTipService.ToolTip="Add blank row (Ctrl+N)"/>
+                            <Button x:Name="DeleteBtn" Content="Delete row" Style="{StaticResource SecondaryButtonStyle}"
+                                    Click="Delete_Click" ToolTipService.ToolTip="Delete selected row"/>
+                            <Button x:Name="SaveBtn" Content="Save include" Style="{StaticResource SecondaryButtonStyle}"
+                                    Click="Save_Click" Visibility="Collapsed"
+                                    ToolTipService.ToolTip="Save Include Yes/No for shuttering"/>
+                            <Button x:Name="UndoBtn" Content="Reload row" Style="{StaticResource SecondaryButtonStyle}"
+                                    Click="Undo_Click" Visibility="Collapsed"
+                                    ToolTipService.ToolTip="Reload selected row into detail form"/>
+                            <Button x:Name="RefreshComputedBtn" Content="Refresh from RCC"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Click="RefreshComputed_Click" Visibility="Collapsed"
+                                    ToolTipService.ToolTip="Recalculate formwork from concrete members"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Excel-style sheet: light theme + full grid borders -->
+                    <Border Grid.Row="1" Padding="0"
+                            Background="#FFFFFF"
+                            BorderBrush="#B4B4B4"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            RequestedTheme="Light">
+                        <ScrollViewer x:Name="SheetHScroll"
+                                      Background="#FFFFFF"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      HorizontalScrollMode="Enabled"
+                                      VerticalScrollMode="Disabled"
+                                      SizeChanged="SheetHScroll_SizeChanged">
+                            <Grid x:Name="SheetWide" Background="#FFFFFF">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <Border BorderBrush="#B4B4B4" BorderThickness="0,0,0,1" Background="#F2F2F2">
+                                    <Grid x:Name="SheetHeader"/>
+                                </Border>
+                                <ScrollViewer x:Name="SheetVScroll" Grid.Row="1"
+                                              Background="#FFFFFF"
+                                              VerticalScrollBarVisibility="Auto"
+                                              VerticalScrollMode="Enabled"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              HorizontalScrollMode="Disabled"
+                                              AutomationProperties.Name="Element datasheet">
+                                    <StackPanel x:Name="SheetRowsHost" Background="#FFFFFF"/>
+                                </ScrollViewer>
+                            </Grid>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- Section sketch -->
+                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
+                        <TextBlock Text="Section sketch" Style="{StaticResource MetaTextStyle}" Margin="0,0,0,2"/>
+                        <Border Style="{StaticResource FluentCardStyle}" Padding="10,8"
+                                VerticalAlignment="Top">
+                            <local:SectionDiagram x:Name="Diagram"
+                                                  AutomationProperties.Name="Member section sketch"/>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Optional detail form + extras -->
+                    <Expander Grid.Row="2" Grid.ColumnSpan="2"
+                              Header="Row detail &amp; extras (bars, advanced fields)"
+                              IsExpanded="False"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Stretch">
+                        <Grid ColumnSpacing="12" Padding="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource FluentCardStyle}" Padding="12,8,12,10">
+                                <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
+                                    <Grid x:Name="FormHost"/>
+                                </ScrollViewer>
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Top" Width="160">
+                                <ComboBox x:Name="RecordCombo" MinWidth="160"
+                                          PlaceholderText="Jump to row…"
+                                          SelectionChanged="RecordCombo_SelectionChanged"
+                                          AutomationProperties.Name="Record selector"/>
+                                <Button Content="Apply form → row" Style="{StaticResource PrimaryButtonStyle}"
+                                        Click="Save_Click"
+                                        ToolTipService.ToolTip="Write detail form values into the selected sheet row"/>
+                            </StackPanel>
+                        </Grid>
+                    </Expander>
+                </Grid>
+            </PivotItem>
+
+            <PivotItem Header="Results">
+                <Grid Padding="0,10,0,0" ColumnSpacing="{StaticResource SectionGap}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="7*"/>
+                        <ColumnDefinition Width="5*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid RowSpacing="4">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <TextBlock Text="Bar bending schedule" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Button Content="Export CSV" Style="{StaticResource SecondaryButtonStyle}"
+                                    HorizontalAlignment="Right" Click="ExportBbs_Click"/>
+                        </Grid>
+                        <Border Grid.Row="1" Style="{StaticResource FluentCardStyle}" Padding="8">
+                            <Border x:Name="BbsHost"/>
+                        </Border>
+                    </Grid>
+
+                    <Grid Grid.Column="1" RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid RowSpacing="4">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid>
+                                <TextBlock Text="Steel summary" Style="{StaticResource SectionHeaderStyle}"/>
+                                <Button Content="Export CSV" Style="{StaticResource SecondaryButtonStyle}"
+                                        HorizontalAlignment="Right" Click="ExportSum_Click"/>
+                            </Grid>
+                            <Border Grid.Row="1" Style="{StaticResource FluentCardStyle}" Padding="8">
+                                <Border x:Name="SummaryHost"/>
+                            </Border>
+                        </Grid>
+                        <Grid Grid.Row="1" RowSpacing="4" MinHeight="140">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="Checks / notes" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border x:Name="ChecksPanel" Grid.Row="1" Style="{StaticResource FluentLayerStyle}" Padding="8">
+                                <Border x:Name="ChecksHost"/>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </PivotItem>
+        </Pivot>
+    </Grid>
+</Page>

@@ -36,6 +36,10 @@ static JsonValue settings_to_json(const Settings& s) {
     for (const auto& kv : s.hook_allowance) hooks.set(std::to_string(kv.first), JsonValue::Num(kv.second));
     o.set("hook_allowance", hooks);
 
+    JsonValue bends = JsonValue::Object();
+    for (const auto& kv : s.bend_deduction) bends.set(std::to_string(kv.first), JsonValue::Num(kv.second));
+    o.set("bend_deduction", bends);
+
     JsonValue tau = JsonValue::Object();
     for (const auto& kv : s.tau_bd) tau.set(kv.first, JsonValue::Num(kv.second));
     o.set("tau_bd", tau);
@@ -43,6 +47,10 @@ static JsonValue settings_to_json(const Settings& s) {
     JsonValue fy = JsonValue::Object();
     for (const auto& kv : s.fy) fy.set(kv.first, JsonValue::Num(kv.second));
     o.set("fy", fy);
+
+    o.set("hysd_bond", JsonValue::Num(s.hysd_bond ? 1 : 0));
+    o.set("hysd_bond_factor", JsonValue::Num(s.hysd_bond_factor));
+    o.set("min_hook_mm", JsonValue::Num(s.min_hook_mm));
     return o;
 }
 
@@ -56,6 +64,10 @@ static void settings_from_json(const JsonValue* o, Settings& s) {
         s.hook_allowance.clear();
         for (const auto& kv : h->obj) s.hook_allowance[std::atoi(kv.first.c_str())] = kv.second.asNumber();
     }
+    if (const JsonValue* b = o->find("bend_deduction"); b && b->isObject()) {
+        s.bend_deduction.clear();
+        for (const auto& kv : b->obj) s.bend_deduction[std::atoi(kv.first.c_str())] = kv.second.asNumber();
+    }
     if (const JsonValue* t = o->find("tau_bd"); t && t->isObject()) {
         s.tau_bd.clear();
         for (const auto& kv : t->obj) s.tau_bd[kv.first] = kv.second.asNumber();
@@ -64,6 +76,9 @@ static void settings_from_json(const JsonValue* o, Settings& s) {
         s.fy.clear();
         for (const auto& kv : f->obj) s.fy[kv.first] = kv.second.asNumber();
     }
+    if (const JsonValue* hb = o->find("hysd_bond")) s.hysd_bond = hb->asNumber() != 0;
+    if (const JsonValue* hf = o->find("hysd_bond_factor")) s.hysd_bond_factor = hf->asNumber();
+    if (const JsonValue* mh = o->find("min_hook_mm")) s.min_hook_mm = mh->asNumber();
 }
 
 static JsonValue rows_to_json(const std::vector<RawRow>& rows) {
@@ -96,14 +111,26 @@ static std::vector<RawRow> rows_from_json(const JsonValue* arr) {
 bool save_project(const std::wstring& path, const ProjectData& data, std::string& err) {
     JsonValue root = JsonValue::Object();
     root.set("format", JsonValue::Str("bbsproj"));
-    root.set("version", JsonValue::Num(2));
+    root.set("version", JsonValue::Num(3));
     root.set("name", JsonValue::Str(data.name));
     root.set("settings", settings_to_json(data.settings));
+    JsonValue levels = JsonValue::Array();
+    for (const auto& lv : data.levels) {
+        JsonValue o = JsonValue::Object();
+        o.set("id", JsonValue::Str(lv.id));
+        o.set("name", JsonValue::Str(lv.name));
+        o.set("height_mm", JsonValue::Num(lv.height_mm));
+        o.set("slab_thickness_mm", JsonValue::Num(lv.slab_thickness_mm));
+        o.set("beam_depth_mm", JsonValue::Num(lv.beam_depth_mm));
+        levels.arr.push_back(o);
+    }
+    root.set("levels", levels);
     root.set("columns", rows_to_json(data.columns));
     root.set("beams", rows_to_json(data.beams));
     root.set("slabs", rows_to_json(data.slabs));
     root.set("footings", rows_to_json(data.footings));
     root.set("walls", rows_to_json(data.walls));
+    root.set("stairs", rows_to_json(data.stairs));
     return write_text_file(path, json_dump(root), err);
 }
 
@@ -119,11 +146,25 @@ bool load_project(const std::wstring& path, ProjectData& out, std::string& err) 
     if (const JsonValue* n = root.find("name"); n && n->type == JsonValue::Type::String)
         out.name = n->str;
     settings_from_json(root.find("settings"), out.settings);
+    out.levels.clear();
+    if (const JsonValue* la = root.find("levels"); la && la->isArray()) {
+        for (const auto& item : la->arr) {
+            if (!item.isObject()) continue;
+            ProjectData::Level lv;
+            if (const JsonValue* id = item.find("id")) lv.id = id->asString();
+            if (const JsonValue* nm = item.find("name")) lv.name = nm->asString();
+            if (const JsonValue* h = item.find("height_mm")) lv.height_mm = h->asNumber();
+            if (const JsonValue* st = item.find("slab_thickness_mm")) lv.slab_thickness_mm = st->asNumber();
+            if (const JsonValue* bd = item.find("beam_depth_mm")) lv.beam_depth_mm = bd->asNumber();
+            out.levels.push_back(lv);
+        }
+    }
     out.columns  = rows_from_json(root.find("columns"));
     out.beams    = rows_from_json(root.find("beams"));
     out.slabs    = rows_from_json(root.find("slabs"));
     out.footings = rows_from_json(root.find("footings"));
-    out.walls    = rows_from_json(root.find("walls"));  // absent in v1 → empty
+    out.walls    = rows_from_json(root.find("walls"));
+    out.stairs   = rows_from_json(root.find("stairs"));
     return true;
 }
 

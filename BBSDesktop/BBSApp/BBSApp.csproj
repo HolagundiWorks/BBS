@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>BBSApp</RootNamespace>
+    <AssemblyName>BOQCore</AssemblyName>
+    <ApplicationTitle>BOQ Core</ApplicationTitle>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Company>Human Centic Works</Company>
+    <Product>BOQ Core</Product>
+    <Authors>Human Centic Works, Hospet</Authors>
+    <Description>BOQ Core — quantity take-off for RCC, masonry, plaster, PCC and earthwork by Human Centic Works, Hospet.</Description>
+    <Copyright>Copyright © Human Centic Works, Hospet</Copyright>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250108002" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+    <PackageReference Include="QuestPDF" Version="2025.7.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\logo.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\logo_plate.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Icons\*.svg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Icons\ATTRIBUTION.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <Target Name="CopyEngineDll" AfterTargets="Build;Publish">
+    <PropertyGroup>
+      <_EngineDll>$(MSBuildThisFileDirectory)..\build\bbs_engine.dll</_EngineDll>
+      <_EngineDest Condition="'$(PublishDir)' != ''">$(PublishDir)</_EngineDest>
+      <_EngineDest Condition="'$(PublishDir)' == ''">$(OutputPath)</_EngineDest>
+    </PropertyGroup>
+    <Copy SourceFiles="$(_EngineDll)"
+          DestinationFolder="$(_EngineDest)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(_EngineDll)')" />
+  </Target>
+</Project>

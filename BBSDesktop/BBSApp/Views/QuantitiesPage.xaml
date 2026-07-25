@@ -1,0 +1,72 @@
+<Page
+    x:Class="BBSApp.Views.QuantitiesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="Transparent">
+    <Grid Style="{StaticResource PageRootStyle}"
+          Transitions="{StaticResource PageContentTransitions}"
+          RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <StackPanel Spacing="2" MaxWidth="720" HorizontalAlignment="Left">
+                <TextBlock Text="Quantities preview" Style="{StaticResource PageTitleStyle}"/>
+                <TextBlock Style="{StaticResource PageSubtitleStyle}"
+                           Text="Concrete m³ · formwork m² · steel kg by storey — check before purchase order or PDF."/>
+            </StackPanel>
+            <Button Content="Refresh" Style="{StaticResource PrimaryButtonStyle}"
+                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                    Click="Refresh_Click"/>
+        </Grid>
+
+        <Border Grid.Row="1" Style="{StaticResource FluentCardCompactStyle}">
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel x:Name="LevelChecks" Orientation="Horizontal" Spacing="8"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                    <HyperlinkButton Content="All" Click="SelectAll_Click"/>
+                    <HyperlinkButton Content="None" Click="SelectNone_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Concrete" Style="{StaticResource SectionHeaderStyle}"/>
+                <TextBlock x:Name="ConcreteTotal" Style="{StaticResource CaptionSecondaryStyle}"/>
+                <Border Style="{StaticResource FluentCardStyle}" Padding="8" MinHeight="200">
+                    <ListView x:Name="ConcreteList" SelectionMode="None"/>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Spacing="4">
+                <TextBlock Text="Formwork / shuttering" Style="{StaticResource SectionHeaderStyle}"/>
+                <TextBlock x:Name="ShutterTotal" Style="{StaticResource CaptionSecondaryStyle}"/>
+                <Border Style="{StaticResource FluentCardStyle}" Padding="8" MinHeight="200">
+                    <ListView x:Name="ShutterList" SelectionMode="None"/>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Spacing="4">
+                <TextBlock Text="Steel (last BBS)" Style="{StaticResource SectionHeaderStyle}"/>
+                <TextBlock x:Name="SteelTotal" Style="{StaticResource CaptionSecondaryStyle}"/>
+                <Border Style="{StaticResource FluentCardStyle}" Padding="8" MinHeight="200">
+                    <ListView x:Name="SteelList" SelectionMode="None"/>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Page>

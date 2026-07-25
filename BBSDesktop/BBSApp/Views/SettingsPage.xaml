@@ -1,0 +1,153 @@
+<Page
+    x:Class="BBSApp.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="Transparent">
+    <ScrollViewer>
+        <StackPanel Spacing="12"
+                    MaxWidth="560"
+                    Padding="{StaticResource PagePadding}"
+                    Transitions="{StaticResource PageContentTransitions}">
+            <StackPanel Spacing="2">
+                <TextBlock Text="Settings" Style="{StaticResource PageTitleStyle}"/>
+                <TextBlock Style="{StaticResource PageSubtitleStyle}"
+                           Text="IS 456 / IS 2502 project defaults used by the schedule engine."/>
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Bar diameters" Style="{StaticResource SectionHeaderStyle}"/>
+                <Border Style="{StaticResource FluentCardStyle}">
+                    <TextBox x:Name="DiaBox"
+                             Header="Available bar diameters (mm)"
+                             PlaceholderText="8, 10, 12, 16, 20, 25…"
+                             AutomationProperties.Name="Available bar diameters"/>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Development length (IS 456 Cl. 26.2.1)" Style="{StaticResource SectionHeaderStyle}"/>
+                <Border Style="{StaticResource FluentCardStyle}">
+                    <StackPanel Spacing="{StaticResource SpacingS}">
+                        <ToggleSwitch x:Name="HysdBondToggle"
+                                      Header="HYSD / deformed bond (τbd × 1.6)"
+                                      OnContent="On" OffContent="Off"
+                                      AutomationProperties.Name="HYSD bond factor"/>
+                        <NumberBox x:Name="HysdFactorBox"
+                                   Header="Bond factor (default 1.6)"
+                                   Minimum="1" Maximum="2" SmallChange="0.1"
+                                   SpinButtonPlacementMode="Compact"
+                                   AutomationProperties.Name="HYSD bond factor value"/>
+                        <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                   TextWrapping="Wrap"
+                                   Text="Plain-bar τbd from Table 21; for Fe415/Fe500/Fe550 multiply by this factor (Cl. 26.2.1.1)."/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Hooks &amp; bends (IS 2502)" Style="{StaticResource SectionHeaderStyle}"/>
+                <Border Style="{StaticResource FluentCardStyle}">
+                    <StackPanel Spacing="{StaticResource SpacingS}">
+                        <TextBox x:Name="HookBox"
+                                 Header="Hook cutting allowances (angle:×φ)"
+                                 PlaceholderText="90:9, 135:10, 180:16"
+                                 AutomationProperties.Name="Hook allowances"/>
+                        <TextBox x:Name="BendBox"
+                                 Header="Bend deductions (angle:×φ)"
+                                 PlaceholderText="45:1, 90:2, 135:3"
+                                 AutomationProperties.Name="Bend deductions"/>
+                        <NumberBox x:Name="MinHookBox"
+                                   Header="Minimum hook length (mm)"
+                                   Minimum="0" SmallChange="5"
+                                   SpinButtonPlacementMode="Compact"
+                                   AutomationProperties.Name="Minimum hook length"/>
+                        <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                   TextWrapping="Wrap"
+                                   Text="Closed stirrup: 2(a+b) + 2×hook − bend deductions. Hook length floored at minimum (typically 75 mm)."/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Civil yields (IS 1200 take-off)" Style="{StaticResource SectionHeaderStyle}"/>
+                <Border Style="{StaticResource FluentCardStyle}">
+                    <StackPanel Spacing="{StaticResource SpacingS}">
+                        <NumberBox x:Name="BricksM3Box" Header="Bricks per m³ (230 mm wall)"
+                                   Minimum="1" Maximum="2000" SmallChange="10"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <NumberBox x:Name="BricksM2Box" Header="Bricks per m² (110 mm wall)"
+                                   Minimum="1" Maximum="500" SmallChange="1"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <NumberBox x:Name="MortarFracBox" Header="Mortar fraction of brickwork"
+                                   Minimum="0.05" Maximum="0.6" SmallChange="0.01"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <NumberBox x:Name="DryFactorBox" Header="Mortar dry volume factor"
+                                   Minimum="1" Maximum="2" SmallChange="0.01"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <NumberBox x:Name="WastageBox" Header="Unit wastage factor (e.g. 1.05)"
+                                   Minimum="1" Maximum="1.5" SmallChange="0.01"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <NumberBox x:Name="ShutterWasteBox" Header="Shuttering wastage factor"
+                                   Minimum="1" Maximum="1.5" SmallChange="0.01"
+                                   SpinButtonPlacementMode="Compact"
+                                   ToolTipService.ToolTip="Applied to formwork m² auto-calculated from RCC"/>
+                        <NumberBox x:Name="IgnoreOpenBox" Header="IS1200 ignore openings below (m²)"
+                                   Minimum="0" Maximum="1" SmallChange="0.05"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <ToggleSwitch x:Name="BeamSlabDeductToggle"
+                                      Header="Beam–slab interface deduct"
+                                      OnContent="Beam sides only (omit soffit)"
+                                      OffContent="Beam soffit + sides"
+                                      AutomationProperties.Name="Beam slab interface deduct"/>
+                        <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                   TextWrapping="Wrap"
+                                   Text="Formwork m² is calculated from RCC members (not typed). When beam–slab deduct is on, beam soffit is omitted (assumes slab formwork). Wastage covers cutting/reuse."/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Covers &amp; laps (IS 456 defaults)" Style="{StaticResource SectionHeaderStyle}"/>
+                <Border Style="{StaticResource FluentCardStyle}">
+                    <StackPanel Spacing="{StaticResource SpacingS}">
+                        <NumberBox x:Name="CoverColBox" Header="Column cover (mm)"
+                                   Minimum="15" Maximum="75" SmallChange="5"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <NumberBox x:Name="CoverBeamBox" Header="Beam / lintel cover (mm)"
+                                   Minimum="15" Maximum="50" SmallChange="5"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <NumberBox x:Name="CoverSlabBox" Header="Slab / stair cover (mm)"
+                                   Minimum="15" Maximum="40" SmallChange="5"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <NumberBox x:Name="CoverFootBox" Header="Footing / wall cover (mm)"
+                                   Minimum="40" Maximum="75" SmallChange="5"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <NumberBox x:Name="CoverPedBox" Header="Pedestal cover (mm)"
+                                   Minimum="40" Maximum="75" SmallChange="5"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <NumberBox x:Name="CoverLintBox" Header="Lintel cover (mm)"
+                                   Minimum="15" Maximum="40" SmallChange="5"
+                                   SpinButtonPlacementMode="Compact"/>
+                        <ComboBox x:Name="ColLapBox" Header="Default column compression lap"
+                                  MinWidth="160">
+                            <x:String>No</x:String>
+                            <x:String>Yes</x:String>
+                        </ComboBox>
+                        <ComboBox x:Name="BeamLapBox" Header="Default beam tension lap"
+                                  MinWidth="160">
+                            <x:String>None</x:String>
+                            <x:String>Tension</x:String>
+                        </ComboBox>
+                        <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                   TextWrapping="Wrap"
+                                   Text="Applied to new rows and stamped before Generate. Clear column height always comes from Levels."/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <Button Content="Save" Style="{StaticResource PrimaryButtonStyle}"
+                    Click="Save_Click" HorizontalAlignment="Left"
+                    AutomationProperties.Name="Save settings"/>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

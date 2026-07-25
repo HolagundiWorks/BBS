@@ -1,4 +1,4 @@
-// Engine.h — BBS calculation engine (columns, beams, slabs, footings, walls).
+// Engine.h — BBS calculation engine (columns, beams, slabs, footings, walls, stairs).
 #pragma once
 
 #include "Model.h"
@@ -18,5 +18,6 @@ BeamResult    generate_beam_bbs(const std::vector<BeamInput>& rows, const Settin
 SlabResult    generate_slab_bbs(const std::vector<SlabInput>& rows, const Settings& s);
 FootingResult generate_footing_bbs(const std::vector<FootingInput>& rows, const Settings& s);
 WallResult    generate_wall_bbs(const std::vector<WallInput>& rows, const Settings& s);
+StairResult   generate_stair_bbs(const std::vector<StairInput>& rows, const Settings& s);
 
 }  // namespace bbs

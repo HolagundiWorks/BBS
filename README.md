@@ -1,60 +1,70 @@
-# BBS Studio
+# RCC Core
 
-Native Windows desktop app for generating **Bar Bending Schedules** (columns,
-beams, slabs, footings, retaining walls) with CSV and HTML export. Quantities
-follow IS 456–derived conventions for estimation — always cross-check against
-structural drawings before construction.
+**RCC Core** — reinforced concrete quantity estimation by **Human Centic Works, Hospet**.
+
+Bar bending schedules, storey levels, concrete material split by grade, and purchase orders (steel + other materials).
+
+Quantities follow IS 456–derived conventions — always cross-check against drawings.
+
+## Stack
+
+| Layer | Tech |
+|-------|------|
+| UI | **C# WinUI 3** (Fluent 2, Mica) |
+| Engine | **C++** `bbs_engine.dll` (JSON C API) |
 
 ## Requirements
 
 - Windows 10/11
-- [CMake](https://cmake.org/) 3.20+
-- MSVC (Visual Studio 2019+ with C++ desktop workload), or a compatible C++17 toolchain
-
-No third-party package manager dependencies — Win32, GDI+, Common Controls only.
+- CMake 3.20+ and MSVC
+- .NET 8 SDK
+- Windows App SDK / WinUI workload
 
 ## Build & run
 
 ```bat
 cd BBSDesktop
-cmake -S . -B build
-cmake --build build --config Release
-.\build\Release\BBSStudio.exe
+cmake -S . -B build -G Ninja
+cmake --build build --config Release --target bbs_engine bbs_tests
+cd BBSApp
+dotnet build -c Release -p:Platform=x64
+dotnet run -c Release -p:Platform=x64
 ```
 
-(If your generator is single-config, the exe may be at `.\build\BBSStudio.exe`.)
+Executable: `bin\x64\Release\net8.0-windows10.0.19041.0\BOQCore.exe`
 
-Engine smoke tests:
+## Installer
 
-```bat
-cmake --build build --config Release --target bbs_tests
-.\build\Release\bbs_tests.exe
+Build a per-user **Setup.exe** (no admin) with [Inno Setup 6](https://jrsoftware.org/isdl.php):
+
+```powershell
+# Once: install Inno Setup 6 from https://jrsoftware.org/isdl.php
+cd BBSDesktop
+cmake -S . -B build -G Ninja
+cmake --build build --config Release --target bbs_engine
+powershell -ExecutionPolicy Bypass -File installer\build-installer.ps1
 ```
+
+Output: `BBSDesktop\artifacts\installer\BOQCore-Setup-1.0.0.exe`  
+Installs to `%LocalAppData%\Programs\BOQ Core\` with Start Menu shortcut (Desktop optional).
 
 ## Features
 
 | Area | What you get |
 |------|----------------|
-| Columns | Ties (closed / double / circular / spiral) + longitudinal bars |
-| Beams | Support/mid stirrups, top/bottom bars, **extra fixed** (`dia:nos:length`), **extra span-%** (`dia:nos:frac`), **skin** (IS 456 Cl. 26.5.1.3) |
-| Slabs | One-way / two-way mesh, extras fixed or mesh (`dia:length:spacing`), min-steel check |
-| Footings | **Isolated / Double / Strip / Raft** — bottom (± top) mesh, extras, anchorage + min-steel |
-| Retaining walls | Stem V/H, base mesh, optional links/extras, min-steel |
-| Project | `.bbsproj` JSON save/load, dashboard totals, HTML report, CSV |
+| Levels | Lvl0 = plinth … LvlN; height = slab-top → slab-top; column H = ht − slab t − beam D |
+| Columns | Shaft + **pedestal** (Lvl0), grade, level-linked height |
+| Beams / slabs / footings / walls | BBS with extras, crank, stepped footings, etc. |
+| Concrete | Volume per element + cement / sand / aggregate by grade (nominal-style split) |
+| Purchase orders | Level-filtered steel PO and materials PO (CSV export) |
+| Project | `.bbsproj` v3 (includes levels), HTML report |
 
-**BBS tables** list one row per identical bar group: Mark, Role, Dia, Cutting length, **Nos**.
+## Branding
 
-## Keyboard / accessibility
-
-- **Ctrl+N / O / S** — New / Open / Save; **Ctrl+Shift+S** — Save As
-- **Ctrl+1…7** — jump to Dashboard … Settings
-- **F6** — focus the navigation rail; **Arrow keys** + **Enter** to switch pages; **Esc** to leave nav focus
-- Forms use native Tab order (`IsDialogMessage`)
-
-See [BBSDesktop/docs/WCAG-AUDIT.md](BBSDesktop/docs/WCAG-AUDIT.md).
+- Product: **BOQ Core** (aka RCC Core)
+- Developer: **Human Centic Works, Hospet**
+- Logo: `BBSDesktop/BBSApp/Assets/logo.png`
 
 ## Disclaimer
 
-This is a quantity-estimation tool. Development length, stirrup zones, and
-minimum-steel checks are simplified IS 456 forms — not a substitute for design
-or detailing drawings.
+Estimation tool only — not a substitute for structural design or site mix design (M30+).

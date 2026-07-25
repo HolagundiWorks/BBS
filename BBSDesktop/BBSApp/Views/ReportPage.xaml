@@ -1,0 +1,34 @@
+<Page
+    x:Class="BBSApp.Views.ReportPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="Transparent">
+    <ScrollViewer>
+        <StackPanel Spacing="12"
+                    MaxWidth="560"
+                    Padding="{StaticResource PagePadding}"
+                    Transitions="{StaticResource PageContentTransitions}">
+            <StackPanel Spacing="2">
+                <TextBlock Text="Report" Style="{StaticResource PageTitleStyle}"/>
+                <TextBlock Style="{StaticResource PageSubtitleStyle}"
+                           Text="Export BBS (RCC steel) and civil quantity take-off for the current project."/>
+            </StackPanel>
+            <StackPanel Spacing="4">
+                <TextBlock Text="Export" Style="{StaticResource SectionHeaderStyle}"/>
+                <Border Style="{StaticResource FluentCardStyle}">
+                    <StackPanel Spacing="{StaticResource SpacingM}">
+                        <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                   Text="PDF includes columns, beams, slabs, footings, retaining walls, stairs, masonry, plaster, PCC, earthwork, size stone — plus concrete by grade and materials (RMC mode skips RCC cement/sand/agg)."/>
+                        <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpacingS}">
+                            <Button Content="Export PDF report" Style="{StaticResource PrimaryButtonStyle}"
+                                    Click="ExportPdf_Click" AutomationProperties.Name="Export PDF report"/>
+                            <Button Content="Export HTML" Style="{StaticResource SecondaryButtonStyle}"
+                                    Click="ExportHtml_Click" AutomationProperties.Name="Export HTML report"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+            <InfoBar x:Name="Info" IsOpen="False"/>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

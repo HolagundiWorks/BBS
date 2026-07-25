@@ -21,26 +21,18 @@ set(CORE_SOURCES
     src/core/Export.cpp
     src/core/Parse.cpp)
 
-set(UI_SOURCES
-    src/ui/Theme.cpp
-    src/ui/Draw.cpp
-    src/ui/Widgets.cpp
-    src/ui/Dialogs.cpp
-    src/ui/Page.cpp
-    src/ui/ElementPage.cpp
-    src/ui/Pages.cpp
-    src/ui/Compute.cpp
-    src/ui/MainWindow.cpp)
+set(API_SOURCES
+    src/api/Bridge.cpp
+    src/api/bbs_c_api.cpp)
 
-add_executable(BBSStudio WIN32
-    src/App.cpp
-    ${CORE_SOURCES}
-    ${UI_SOURCES}
-    app.manifest)  # CMake embeds this as the single application manifest
-
-target_link_libraries(BBSStudio PRIVATE
-    gdiplus dwmapi uxtheme comctl32 comdlg32 user32 gdi32 shell32 ole32)
+# Shared engine DLL for the WinUI C# shell (P/Invoke).
+add_library(bbs_engine SHARED ${CORE_SOURCES} ${API_SOURCES})
+target_compile_definitions(bbs_engine PRIVATE BBS_ENGINE_EXPORTS)
+target_include_directories(bbs_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(bbs_engine PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 # Engine smoke tests (console).
 add_executable(bbs_tests tests/test_engine.cpp src/core/Engine.cpp src/core/Parse.cpp)
-
