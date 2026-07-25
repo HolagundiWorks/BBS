@@ -1,0 +1,25 @@
+# Build outputs
+BBSDesktop/build/
+BBSDesktop/build_test/
+BBSDesktop/tests/out/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/.ninja_log
+**/build.ninja
+
+# Compiled / local junk
+__pycache__/
+*.pyc
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# Keep source tree; ignore accidental local project saves
+*.bbsproj
+*.user
+.vs/
+*.suo
