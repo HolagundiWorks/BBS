@@ -6,7 +6,7 @@ RCC bar bending schedules, civil BOQ, drawing takeoff, rate books, DSR-style est
 
 Quantities follow IS 456 / IS 1200–derived conventions — always cross-check against drawings.
 
-**License:** [Apache License 2.0](LICENSE) · see also [NOTICE](NOTICE)
+**Version:** 1.0.1 · **License:** [Apache License 2.0](LICENSE) · see also [NOTICE](NOTICE) · [CHANGELOG](CHANGELOG.md)
 
 ## Stack
 
@@ -49,8 +49,10 @@ cd BBSDesktop
 powershell -ExecutionPolicy Bypass -File installer\build-installer.ps1
 ```
 
-Output: `BBSDesktop\artifacts\installer\AQCCore-Setup-1.0.0.exe`  
+Output: `BBSDesktop\artifacts\installer\AQCCore-Setup-1.0.1.exe`  
 Installs to `%LocalAppData%\Programs\AQC-Core\`
+
+The version comes from `<Version>` in `BBSApp.csproj`; the script passes it to Inno Setup, so the output filename tracks it automatically. Pass `-SkipEngineBuild` when `BBSDesktop\build\bbs_engine.dll` already exists.
 
 ## MSIX (Store / sideload)
 
