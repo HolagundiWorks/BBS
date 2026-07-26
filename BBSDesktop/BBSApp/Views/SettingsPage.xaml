@@ -318,6 +318,81 @@
                     </StackPanel>
                 </ScrollViewer>
             </PivotItem>
+
+            <PivotItem Header="AI / Foundry">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,8,0,0">
+                    <StackPanel Spacing="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="AI service status" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border x:Name="FoundryStatusDot" Width="12" Height="12" CornerRadius="6"
+                                                VerticalAlignment="Center"
+                                                Background="#FFB0B0B0"/>
+                                        <StackPanel Grid.Column="1" Spacing="2">
+                                            <TextBlock x:Name="FoundryRunStateText" Text="Checking…"
+                                                       Style="{StaticResource BodyStrongStyle}"/>
+                                            <TextBlock x:Name="FoundryStatusText" Style="{StaticResource CaptionSecondaryStyle}"
+                                                       TextWrapping="Wrap" Text=""/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button x:Name="FoundryStartBtn" Content="Start" Click="FoundryStart_Click"
+                                                Style="{StaticResource PrimaryButtonStyle}"/>
+                                        <Button x:Name="FoundryStopBtn" Content="Stop" Click="FoundryStop_Click"
+                                                Style="{StaticResource SecondaryButtonStyle}"/>
+                                        <Button x:Name="FoundryRestartBtn" Content="Restart" Click="FoundryRestart_Click"
+                                                Style="{StaticResource SecondaryButtonStyle}"/>
+                                        <Button Content="Refresh" Click="FoundryRefresh_Click"
+                                                Style="{StaticResource ToolbarButtonStyle}"/>
+                                        <Button Content="Test connection" Click="TestFoundry_Click"
+                                                Style="{StaticResource ToolbarButtonStyle}"/>
+                                        <Button x:Name="FoundryLoadBtn" Content="Load model" Click="FoundryLoadModel_Click"
+                                                Style="{StaticResource ToolbarButtonStyle}"
+                                                ToolTipService.ToolTip="Download (first time) and load the selected model into the running AI service"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Foundry Local (Qwen3-VL)" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <TextBlock Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"
+                                               Text="Connects to Microsoft Foundry Local for drawing auto-pick. Pick a vision model below and click Load model, then use Drawing takeoff → AI auto-pick. On a 16 GB, CPU-only PC use the 2B model; 4B/8B are more accurate but need more RAM."/>
+                                    <TextBox x:Name="FoundryEndpointBox"
+                                             Header="Endpoint (blank = auto-discover)"
+                                             PlaceholderText="http://127.0.0.1:PORT"
+                                             AutomationProperties.Name="Foundry endpoint"/>
+                                    <ComboBox x:Name="FoundryModelBox"
+                                              Header="Vision model" IsEditable="True"
+                                              HorizontalAlignment="Stretch"
+                                              PlaceholderText="qwen3-vl-2b-instruct"
+                                              AutomationProperties.Name="Foundry model">
+                                        <ComboBoxItem Content="qwen3-vl-2b-instruct"/>
+                                        <ComboBoxItem Content="qwen3-vl-4b-instruct"/>
+                                        <ComboBoxItem Content="qwen3-vl-8b-instruct"/>
+                                    </ComboBox>
+                                    <NumberBox x:Name="FoundryConfidenceBox"
+                                               Header="Auto-accept confidence threshold"
+                                               Minimum="0.4" Maximum="0.95" SmallChange="0.05"
+                                               SpinButtonPlacementMode="Compact"
+                                               AutomationProperties.Name="Confidence threshold"/>
+                                    <ToggleSwitch x:Name="FoundryAutoLoadToggle"
+                                                  Header="Auto-load model if missing"
+                                                  OnContent="On" OffContent="Off"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </PivotItem>
         </Pivot>
 
         <Button Grid.Row="2" Content="Save" Style="{StaticResource PrimaryButtonStyle}"

@@ -39,7 +39,16 @@ public sealed class TakeoffListRow : INotifyPropertyChanged
             return $"{Item.Category} · {Item.Level} · {Item.LengthMm:0.#} mm · {mode}";
         }
     }
-    public string DisplayStatus => Item.Committed ? "Committed" : "Pending";
+    public string DisplayStatus
+    {
+        get
+        {
+            if (Item.Committed) return "Committed";
+            if (Item.Fields.TryGetValue("ai_confidence", out var c) && !string.IsNullOrWhiteSpace(c))
+                return $"AI {c}";
+            return "Pending";
+        }
+    }
     public void Refresh() => OnPropertyChanged(string.Empty);
     public event PropertyChangedEventHandler? PropertyChanged;
     void OnPropertyChanged([CallerMemberName] string? n = null) =>
@@ -96,6 +105,7 @@ public sealed partial class TakeoffPage : Page
         UpdateModeStatus();
         UpdateScaleLabel();
         _ = TryReloadPdfAsync();
+        _ = RefreshAiStatusAsync();
     }
 
     private TakeoffState State => ProjectStore.Current.Takeoff;
@@ -1506,6 +1516,270 @@ public sealed partial class TakeoffPage : Page
         ProjectStore.Current.Notify();
         ReloadList();
         UpdateModeStatus();
+    }
+
+    private async void AutoPick_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(State.PdfPath))
+        {
+            Notify("Import PDF first", "AI auto-pick needs a drawing page.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        AutoPickBtn.IsEnabled = false;
+        var progress = new Progress<string>(msg => Notify("AI auto-pick", msg, InfoBarSeverity.Informational));
+        try
+        {
+            var settings = FoundrySettings.Load();
+            var result = await TakeoffVisionService.DetectAsync(ProjectStore.Current, settings, progress);
+            if (!result.Ok)
+            {
+                Notify("AI auto-pick failed", result.Error ?? "Unknown error", InfoBarSeverity.Error);
+                await ShowAiFailureDialogAsync(result.Error ?? "Unknown error");
+                await RefreshAiStatusAsync();
+                return;
+            }
+
+            int added = 0;
+            double canvasW = 1, canvasH = 1;
+            if (CanvasHost.PageSource is Microsoft.UI.Xaml.Media.Imaging.BitmapSource bs
+                && bs.PixelWidth > 0 && bs.PixelHeight > 0)
+            {
+                canvasW = bs.PixelWidth;
+                canvasH = bs.PixelHeight;
+            }
+
+            foreach (var d in result.HighConfidence)
+            {
+                var item = TakeoffVisionService.ToTakeoffItem(d, ProjectStore.Current, _level, canvasW, canvasH);
+                TakeoffVisionService.FinalizeItem(item);
+                State.Items.Add(item);
+                added++;
+            }
+
+            ProjectStore.Current.Notify();
+            ReloadList();
+            CanvasHost.Redraw(State.Items);
+
+            if (result.LowConfidence.Count > 0)
+            {
+                var accepted = await ReconcileLowConfidenceAsync(result.LowConfidence);
+                foreach (var d in accepted)
+                {
+                    var item = TakeoffVisionService.ToTakeoffItem(d, ProjectStore.Current, _level, canvasW, canvasH);
+                    TakeoffVisionService.FinalizeItem(item);
+                    State.Items.Add(item);
+                    added++;
+                }
+                ProjectStore.Current.Notify();
+                ReloadList();
+                CanvasHost.Redraw(State.Items);
+            }
+
+            FinalizeAiBtn.Visibility = Visibility.Collapsed;
+            Notify("AI auto-pick",
+                $"Added {added} mark(s) · {result.HighConfidence.Count} high confidence · {result.LowConfidence.Count} reconciled. Review then Commit to BOQ.",
+                InfoBarSeverity.Success);
+            UpdateModeStatus();
+            await RefreshAiStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            Notify("AI auto-pick failed", ex.Message, InfoBarSeverity.Error);
+        }
+        finally
+        {
+            AutoPickBtn.IsEnabled = true;
+        }
+    }
+
+    private async System.Threading.Tasks.Task ShowAiFailureDialogAsync(string error)
+    {
+        string diag = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "AQC-Core", "ai-last-error.txt");
+        string extra = File.Exists(diag) ? $"\n\nDetails saved to:\n{diag}" : "";
+        var dlg = new ContentDialog
+        {
+            Title = "AI auto-pick failed",
+            Content = new ScrollViewer
+            {
+                Content = new TextBlock
+                {
+                    Text = error + extra + "\n\nChecks:\n• AI status is Running (Start if needed)\n• Model loaded: Settings → AI / Foundry → Load model (qwen3-vl-2b-instruct)\n• PDF is imported on this page",
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxWidth = 480
+                },
+                MaxHeight = 360
+            },
+            CloseButtonText = "OK",
+            XamlRoot = XamlRoot
+        };
+        await dlg.ShowAsync();
+    }
+
+    private async System.Threading.Tasks.Task RefreshAiStatusAsync()
+    {
+        try
+        {
+            var st = await FoundryLocalClient.GetDaemonStatusAsync();
+            ApplyAiStatus(st);
+        }
+        catch
+        {
+            AiStatusLabel.Text = "AI error";
+            AiStatusDot.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 200, 60, 60));
+            AiStartBtn.IsEnabled = true;
+            AiStopBtn.IsEnabled = false;
+        }
+    }
+
+    private void ApplyAiStatus(FoundryDaemonStatus st)
+    {
+        AiStatusLabel.Text = st.StatusLabel;
+        ToolTipService.SetToolTip(AiStatusLabel, st.Summary);
+        AiStatusDot.Background = new SolidColorBrush(
+            st.Running
+                ? Windows.UI.Color.FromArgb(255, 34, 160, 80)
+                : Windows.UI.Color.FromArgb(255, 176, 176, 176));
+        AiStartBtn.IsEnabled = !st.Running;
+        AiStopBtn.IsEnabled = st.Running;
+        AiRestartBtn.IsEnabled = true;
+        // Keep auto-pick enabled — DetectAsync reports a clear error if the daemon/model is down.
+        AutoPickBtn.IsEnabled = true;
+    }
+
+    private void SetAiBusy(bool busy)
+    {
+        AiStartBtn.IsEnabled = !busy;
+        AiStopBtn.IsEnabled = !busy;
+        AiRestartBtn.IsEnabled = !busy;
+    }
+
+    private async void AiStart_Click(object sender, RoutedEventArgs e)
+    {
+        AiStatusLabel.Text = "Starting…";
+        SetAiBusy(true);
+        try
+        {
+            var (ok, msg) = await FoundryLocalClient.StartDaemonAsync();
+            Notify(ok ? "AI started" : "AI start failed", msg, ok ? InfoBarSeverity.Success : InfoBarSeverity.Error);
+            await RefreshAiStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            Notify("AI start failed", ex.Message, InfoBarSeverity.Error);
+            SetAiBusy(false);
+        }
+    }
+
+    private async void AiStop_Click(object sender, RoutedEventArgs e)
+    {
+        AiStatusLabel.Text = "Stopping…";
+        SetAiBusy(true);
+        try
+        {
+            var (ok, msg) = await FoundryLocalClient.StopDaemonAsync();
+            Notify(ok ? "AI stopped" : "AI stop failed", msg, ok ? InfoBarSeverity.Informational : InfoBarSeverity.Error);
+            await RefreshAiStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            Notify("AI stop failed", ex.Message, InfoBarSeverity.Error);
+            SetAiBusy(false);
+        }
+    }
+
+    private async void AiRestart_Click(object sender, RoutedEventArgs e)
+    {
+        AiStatusLabel.Text = "Restarting…";
+        SetAiBusy(true);
+        try
+        {
+            var (ok, msg) = await FoundryLocalClient.RestartDaemonAsync();
+            Notify(ok ? "AI restarted" : "AI restart failed", msg, ok ? InfoBarSeverity.Success : InfoBarSeverity.Error);
+            await RefreshAiStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            Notify("AI restart failed", ex.Message, InfoBarSeverity.Error);
+            SetAiBusy(false);
+        }
+    }
+
+    private async System.Threading.Tasks.Task<List<VisionDetection>> ReconcileLowConfidenceAsync(
+        IReadOnlyList<VisionDetection> low)
+    {
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "These detections are below the confidence threshold. Accept the ones that look correct, then Finalize.",
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        var checks = new List<(CheckBox Box, VisionDetection Det)>();
+        foreach (var d in low.OrderByDescending(x => x.Confidence))
+        {
+            var box = new CheckBox
+            {
+                IsChecked = d.Confidence >= 0.45,
+                Content = $"{d.Category} · {d.Tool} · {d.Confidence:P0}"
+                          + (string.IsNullOrWhiteSpace(d.Note) ? "" : $" · {d.Note}"),
+                Tag = d
+            };
+            // Preview mark on canvas while dialog open
+            box.Checked += (_, _) => PreviewReconcile(low, checks);
+            box.Unchecked += (_, _) => PreviewReconcile(low, checks);
+            checks.Add((box, d));
+            panel.Children.Add(box);
+        }
+
+        var scroll = new ScrollViewer
+        {
+            Content = panel,
+            MaxHeight = 360,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
+
+        var dlg = new ContentDialog
+        {
+            Title = "Reconcile AI picks",
+            Content = scroll,
+            PrimaryButtonText = "Finalize accepted",
+            CloseButtonText = "Skip all low-confidence",
+            XamlRoot = XamlRoot,
+            DefaultButton = ContentDialogButton.Primary
+        };
+
+        var result = await dlg.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+            return new List<VisionDetection>();
+
+        return checks.Where(c => c.Box.IsChecked == true).Select(c => c.Det).ToList();
+    }
+
+    private void PreviewReconcile(IReadOnlyList<VisionDetection> allLow, List<(CheckBox Box, VisionDetection Det)> checks)
+    {
+        // Lightweight: redraw existing + temporary high-light via selected item only
+        CanvasHost.Redraw(State.Items);
+    }
+
+    private void FinalizeAi_Click(object sender, RoutedEventArgs e)
+    {
+        int n = 0;
+        foreach (var it in State.Items)
+        {
+            if (it.Fields.TryGetValue(TakeoffVisionService.PendingField, out var p) && p == "1")
+            {
+                TakeoffVisionService.FinalizeItem(it);
+                n++;
+            }
+        }
+        ProjectStore.Current.Notify();
+        foreach (var r in _rows) r.Refresh();
+        CanvasHost.Redraw(State.Items);
+        FinalizeAiBtn.Visibility = Visibility.Collapsed;
+        Notify("Finalized", $"{n} AI pick(s) confirmed on the drawing.", InfoBarSeverity.Success);
     }
 
     private static double Dist(TakeoffPoint a, TakeoffPoint b) =>

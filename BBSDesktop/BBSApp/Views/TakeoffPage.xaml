@@ -32,6 +32,27 @@
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <Button Content="Import PDF" Click="ImportPdf_Click" Style="{StaticResource PrimaryButtonStyle}"/>
+                <Border Padding="8,4" CornerRadius="4" Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Border x:Name="AiStatusDot" Width="8" Height="8" CornerRadius="4"
+                                VerticalAlignment="Center" Background="#FFB0B0B0"/>
+                        <TextBlock x:Name="AiStatusLabel" Text="AI …" VerticalAlignment="Center"
+                                   Style="{StaticResource CaptionSecondaryStyle}" MinWidth="64"/>
+                        <Button x:Name="AiStartBtn" Content="Start" Click="AiStart_Click"
+                                Style="{StaticResource ToolbarButtonStyle}" Padding="8,2"/>
+                        <Button x:Name="AiStopBtn" Content="Stop" Click="AiStop_Click"
+                                Style="{StaticResource ToolbarButtonStyle}" Padding="8,2"/>
+                        <Button x:Name="AiRestartBtn" Content="Restart" Click="AiRestart_Click"
+                                Style="{StaticResource ToolbarButtonStyle}" Padding="8,2"/>
+                    </StackPanel>
+                </Border>
+                <Button x:Name="AutoPickBtn" Content="AI auto-pick" Click="AutoPick_Click"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        ToolTipService.ToolTip="Qwen3-VL via Foundry Local — detect columns, walls, and other elements"/>
+                <Button x:Name="FinalizeAiBtn" Content="Finalize picks" Click="FinalizeAi_Click"
+                        Style="{StaticResource SecondaryButtonStyle}" Visibility="Collapsed"
+                        ToolTipService.ToolTip="Confirm AI proposals (after reconcile)"/>
                 <Button Content="Commit to BOQ" Click="Commit_Click" Style="{StaticResource PrimaryButtonStyle}"/>
                 <Button Content="Delete" Click="Delete_Click" Style="{StaticResource SecondaryButtonStyle}"/>
                 <Button x:Name="ToggleRightBtn" Click="ToggleRightPanel_Click" Width="32" Height="28" Padding="0"

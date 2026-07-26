@@ -2,6 +2,7 @@ using System.Globalization;
 using BBSApp.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
@@ -10,7 +11,7 @@ namespace BBSApp.Views;
 
 public sealed partial class SettingsPage : Page
 {
-    public enum SettingsTab { Project, Engineering, CostPercent }
+    public enum SettingsTab { Project, Engineering, CostPercent, Foundry }
 
     private string _pendingLogoPath = "";
     private readonly SettingsTab _initialTab;
@@ -22,6 +23,7 @@ public sealed partial class SettingsPage : Page
         LoadProjectFields();
         LoadEngineeringFields();
         LoadMarkupFields();
+        LoadFoundryFields();
         Loaded += OnLoaded;
     }
 
@@ -32,8 +34,169 @@ public sealed partial class SettingsPage : Page
         {
             SettingsTab.Engineering => 1,
             SettingsTab.CostPercent => 2,
+            SettingsTab.Foundry => 3,
             _ => 0
         };
+    }
+
+    private void LoadFoundryFields()
+    {
+        var f = FoundrySettings.Load();
+        FoundryEndpointBox.Text = f.Endpoint ?? "";
+        FoundryModelBox.Text = string.IsNullOrWhiteSpace(f.ModelAlias) ? "qwen3-vl-2b-instruct" : f.ModelAlias;
+        FoundryConfidenceBox.Value = f.ConfidenceThreshold;
+        FoundryAutoLoadToggle.IsOn = f.AutoLoadModel;
+        FoundryStatusText.Text = "Checking…";
+        FoundryRunStateText.Text = "Checking…";
+        _ = RefreshFoundryStatusAsync();
+    }
+
+    private async System.Threading.Tasks.Task RefreshFoundryStatusAsync()
+    {
+        SetFoundryBusy(true);
+        try
+        {
+            var st = await FoundryLocalClient.GetDaemonStatusAsync();
+            ApplyFoundryStatus(st);
+        }
+        catch (Exception ex)
+        {
+            FoundryRunStateText.Text = "Error";
+            FoundryStatusText.Text = ex.Message;
+            FoundryStatusDot.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 200, 60, 60));
+        }
+        finally
+        {
+            SetFoundryBusy(false);
+        }
+    }
+
+    private void ApplyFoundryStatus(FoundryDaemonStatus st)
+    {
+        FoundryRunStateText.Text = st.StatusLabel;
+        FoundryStatusText.Text = string.IsNullOrWhiteSpace(st.Error)
+            ? st.Summary
+            : $"{st.Summary} — {st.Error}";
+        FoundryStatusDot.Background = new SolidColorBrush(
+            st.Running
+                ? Windows.UI.Color.FromArgb(255, 34, 160, 80)
+                : string.IsNullOrEmpty(st.Error)
+                    ? Windows.UI.Color.FromArgb(255, 176, 176, 176)
+                    : Windows.UI.Color.FromArgb(255, 200, 60, 60));
+        FoundryStartBtn.IsEnabled = !st.Running;
+        FoundryStopBtn.IsEnabled = st.Running;
+        FoundryRestartBtn.IsEnabled = true;
+        if (!string.IsNullOrWhiteSpace(st.Endpoint) && string.IsNullOrWhiteSpace(FoundryEndpointBox.Text))
+            FoundryEndpointBox.PlaceholderText = st.Endpoint;
+    }
+
+    private void SetFoundryBusy(bool busy)
+    {
+        if (busy)
+        {
+            FoundryStartBtn.IsEnabled = false;
+            FoundryStopBtn.IsEnabled = false;
+            FoundryRestartBtn.IsEnabled = false;
+            return;
+        }
+        // Re-enabled by ApplyFoundryStatus after refresh
+        FoundryRestartBtn.IsEnabled = true;
+    }
+
+    private async void FoundryRefresh_Click(object sender, RoutedEventArgs e) =>
+        await RefreshFoundryStatusAsync();
+
+    private async void FoundryStart_Click(object sender, RoutedEventArgs e)
+    {
+        FoundryRunStateText.Text = "Starting…";
+        FoundryStatusText.Text = "Starting Foundry Local daemon…";
+        SetFoundryBusy(true);
+        try
+        {
+            var (ok, msg) = await FoundryLocalClient.StartDaemonAsync();
+            FoundryStatusText.Text = msg;
+            await RefreshFoundryStatusAsync();
+            if (!ok) FoundryRunStateText.Text = "Start failed";
+        }
+        catch (Exception ex)
+        {
+            FoundryRunStateText.Text = "Error";
+            FoundryStatusText.Text = ex.Message;
+            SetFoundryBusy(false);
+        }
+    }
+
+    private async void FoundryStop_Click(object sender, RoutedEventArgs e)
+    {
+        FoundryRunStateText.Text = "Stopping…";
+        FoundryStatusText.Text = "Stopping Foundry Local daemon…";
+        SetFoundryBusy(true);
+        try
+        {
+            var (ok, msg) = await FoundryLocalClient.StopDaemonAsync();
+            FoundryStatusText.Text = msg;
+            await RefreshFoundryStatusAsync();
+            if (!ok) FoundryRunStateText.Text = "Stop failed";
+        }
+        catch (Exception ex)
+        {
+            FoundryRunStateText.Text = "Error";
+            FoundryStatusText.Text = ex.Message;
+            SetFoundryBusy(false);
+        }
+    }
+
+    private async void FoundryRestart_Click(object sender, RoutedEventArgs e)
+    {
+        FoundryRunStateText.Text = "Restarting…";
+        FoundryStatusText.Text = "Restarting Foundry Local daemon…";
+        SetFoundryBusy(true);
+        try
+        {
+            var (ok, msg) = await FoundryLocalClient.RestartDaemonAsync();
+            FoundryStatusText.Text = msg;
+            await RefreshFoundryStatusAsync();
+            if (!ok) FoundryRunStateText.Text = "Restart failed";
+        }
+        catch (Exception ex)
+        {
+            FoundryRunStateText.Text = "Error";
+            FoundryStatusText.Text = ex.Message;
+            SetFoundryBusy(false);
+        }
+    }
+
+    private string FoundryModelAlias() =>
+        string.IsNullOrWhiteSpace(FoundryModelBox.Text) ? "qwen3-vl-2b-instruct" : FoundryModelBox.Text.Trim();
+
+    private async void FoundryLoadModel_Click(object sender, RoutedEventArgs e)
+    {
+        var alias = FoundryModelAlias();
+        FoundryRunStateText.Text = "Loading model…";
+        FoundryStatusText.Text = $"Loading {alias} (first time downloads it — this can take a few minutes)…";
+        SetFoundryBusy(true);
+        FoundryLoadBtn.IsEnabled = false;
+        try
+        {
+            using var client = new FoundryLocalClient();
+            if (!await client.ConnectAsync(FoundrySettings.Load()))
+            {
+                FoundryStatusText.Text = client.LastError ?? "AI service not reachable. Click Start first.";
+                FoundryRunStateText.Text = "Unreachable";
+                return;
+            }
+            var (ok, msg) = await client.LoadModelAsync(alias);
+            FoundryStatusText.Text = ok ? $"{msg} Ready for AI auto-pick." : msg;
+        }
+        catch (Exception ex)
+        {
+            FoundryStatusText.Text = ex.Message;
+        }
+        finally
+        {
+            FoundryLoadBtn.IsEnabled = true;
+            await RefreshFoundryStatusAsync();
+        }
     }
 
     private void LoadMarkupFields()
@@ -252,8 +415,56 @@ public sealed partial class SettingsPage : Page
         m.EscalationPct = Pct(EscalationPctBox.Value, 5);
         m.ConsultingFeePct = Pct(ConsultingPctBox.Value, 3);
 
+        var f = new FoundrySettings
+        {
+            Endpoint = (FoundryEndpointBox.Text ?? "").Trim(),
+            ModelAlias = string.IsNullOrWhiteSpace(FoundryModelBox.Text)
+                ? "qwen3-vl-2b-instruct"
+                : FoundryModelBox.Text.Trim(),
+            ConfidenceThreshold = double.IsNaN(FoundryConfidenceBox.Value)
+                ? 0.72
+                : Math.Clamp(FoundryConfidenceBox.Value, 0.4, 0.95),
+            AutoLoadModel = FoundryAutoLoadToggle.IsOn
+        };
+        f.Save();
+
         store.Notify();
-        AppNotify.Success("Settings saved", "Project, engineering, and cost percentages.");
+        AppNotify.Success("Settings saved", "Project, engineering, cost %, and Foundry AI.");
+    }
+
+    private async void TestFoundry_Click(object sender, RoutedEventArgs e)
+    {
+        FoundryStatusText.Text = "Connecting…";
+        var f = new FoundrySettings
+        {
+            Endpoint = (FoundryEndpointBox.Text ?? "").Trim(),
+            ModelAlias = string.IsNullOrWhiteSpace(FoundryModelBox.Text)
+                ? "qwen3-vl-2b-instruct"
+                : FoundryModelBox.Text.Trim(),
+            AutoLoadModel = FoundryAutoLoadToggle.IsOn
+        };
+        try
+        {
+            using var client = new FoundryLocalClient();
+            if (!await client.ConnectAsync(f))
+            {
+                FoundryStatusText.Text = client.LastError ?? "Failed.";
+                FoundryRunStateText.Text = "Unreachable";
+                FoundryStatusDot.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 200, 60, 60));
+                return;
+            }
+            await client.EnsureModelLoadedAsync(f.ModelAlias, f.AutoLoadModel);
+            var ids = await client.ListModelIdsAsync();
+            string model = FoundryLocalClient.ResolveModelId(ids, f.ModelAlias);
+            FoundryStatusText.Text = $"OK · {client.BaseUrl} · model `{model}` · {ids.Count} loaded id(s).";
+            FoundryEndpointBox.PlaceholderText = client.BaseUrl;
+            await RefreshFoundryStatusAsync();
+        }
+        catch (Exception ex)
+        {
+            FoundryStatusText.Text = ex.Message;
+            FoundryRunStateText.Text = "Error";
+        }
     }
 
     private static double Val(double v, double def) =>
