@@ -1,14 +1,14 @@
-; BOQ Core — Inno Setup script (per-user, no admin)
+; AQC-Core — Inno Setup script (per-user, no admin)
 ; Build via: powershell -File build-installer.ps1
 
 #ifndef AppVersion
   #define AppVersion "1.0.0"
 #endif
 
-#define MyAppName "BOQ Core"
+#define MyAppName "AQC-Core"
 #define MyAppPublisher "Human Centic Works"
 #define MyAppPublisherUrl "https://humancentic.works"
-#define MyAppExeName "BOQCore.exe"
+#define MyAppExeName "AQCCore.exe"
 #define MyAppId "{{A8F3C2E1-9B4D-4E6A-8C1F-2D7E5A9B0C3D}"
 
 [Setup]
@@ -26,7 +26,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\artifacts\installer
-OutputBaseFilename=BOQCore-Setup-{#AppVersion}
+OutputBaseFilename=AQCCore-Setup-{#AppVersion}
 SetupIconFile=..\BBSApp\Assets\app.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
@@ -36,6 +36,7 @@ VersionInfoVersion={#AppVersion}.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoProductName={#MyAppName}
 VersionInfoCopyright=Copyright © {#MyAppPublisher}, Hospet
+LicenseFile=..\..\LICENSE
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

@@ -1,6 +1,6 @@
 # Construction nav icons
 
-## Custom (BOQ Core / RCC)
+## Custom (AQC-Core / RCC)
 - `column.svg` — RC column (shaft, capital, base)
 - `beam.svg` — RC beam on supports
 - `slab.svg` — RC slab with thickness / mesh hint

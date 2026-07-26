@@ -329,6 +329,8 @@ public sealed class TakeoffState
             "skirting" => store.Skirting,
             "parapet" => store.Parapet,
             "plinth_protection" or "plinth" => store.PlinthProtection,
+            "doors" or "door" => store.Doors,
+            "windows" or "window" => store.Windows,
             _ => null
         };
         if (rows is null) yield break;
@@ -361,6 +363,8 @@ public sealed class TakeoffState
             "skirting" => store.Skirting,
             "parapet" => store.Parapet,
             "plinth_protection" or "plinth" => store.PlinthProtection,
+            "doors" or "door" => store.Doors,
+            "windows" or "window" => store.Windows,
             _ => null
         };
 
@@ -440,9 +444,9 @@ public sealed class TakeoffState
                     double wh = ProjectStore.Current.ColumnHeightFor(level);
                     row["height"] = wh > 0 ? wh.ToString("0", CultureInfo.InvariantCulture) : "3000";
                 }
-                row["thickness"] = "230"; row["unit_type"] = "Brick"; row["mortar_mix"] = "1:6";
+                row["mortar_mix"] = "1:6";
                 row["deduct_rule"] = "IS1200 masonry";
-                row["opening_nos"] = "0"; row["opening_l"] = "0"; row["opening_h"] = "0";
+                MasonryWallBuild.Apply(row, "Brick · 230 mm");
                 break;
             case "plaster":
                 row["length"] = lengthMm > 0 ? len : "5000";
@@ -475,13 +479,20 @@ public sealed class TakeoffState
             case "flooring":
                 row["length"] = lengthMm > 0 ? len : "4000";
                 row["breadth"] = breadthMm > 0 ? br : "3000";
-                row["finish_type"] = "Tile"; row["deduct_rule"] = "Openings full";
+                row["finish_type"] = "Vitrified tiles";
+                row["surface_kind"] = "Floor";
+                row["tile_size"] = "600×600";
+                row["deduct_rule"] = "Openings full";
                 break;
             case "painting":
             case "paint":
                 row["length"] = lengthMm > 0 ? len : "5000";
                 row["height"] = "3000";
-                row["paint_type"] = "Emulsion"; row["faces"] = "1"; row["coats"] = "2";
+                row["paint_type"] = "Emulsion";
+                row["paint_location"] = "Inside walls";
+                row["paint_system"] = "2 coat primer + 3 coat putty + 2 coat paint";
+                row["faces"] = "1";
+                row["coats"] = "2";
                 row["deduct_rule"] = "IS1200 plaster/paint";
                 break;
             case "waterproofing":

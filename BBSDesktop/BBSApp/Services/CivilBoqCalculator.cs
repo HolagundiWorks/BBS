@@ -1,4 +1,5 @@
 using System.Globalization;
+using BBSApp.Models;
 
 namespace BBSApp.Services;
 
@@ -20,6 +21,12 @@ public sealed class CivilLine
     public double SandM3 { get; set; }
     public double AggregateM3 { get; set; }
     public string Notes { get; set; } = "";
+    /// <summary>Stable rate-book code (estimate layer).</summary>
+    public string ItemCode { get; set; } = "";
+    /// <summary>Member dimensions in metres (estimate / measurement sheet).</summary>
+    public double LengthM { get; set; }
+    public double BreadthM { get; set; }
+    public double HeightM { get; set; }
 }
 
 /// <summary>
@@ -98,7 +105,7 @@ public static class CivilBoqCalculator
                 Rows = new List<List<string>>
                 {
                     new() { "Quantity take-off only — no rates. Yields are editable in Settings." },
-                    new() { "Deduction rules: None · Openings full · IS1200 masonry · IS1200 plaster/paint." },
+                    new() { "Deduction: MasonryOpenings + Doors/Windows (wall_mark). IS1200 masonry ignores small openings. Plaster/paint can add jambs (wall thickness)." },
                     new() { "Shuttering / formwork is calculated from RCC concrete members (not entered manually)." }
                 }
             }
@@ -126,6 +133,8 @@ public static class CivilBoqCalculator
         lines.AddRange(ShutteringCalculator.AutoFromRcc(store, filter));
         foreach (var r in MaterialsCalculator.FilterByLevels(store.Flooring, filter))
             lines.AddRange(LinesForRow("flooring", r));
+        // Painting area follows plaster qty (type/coats kept on painting rows).
+        FinishSurfacesCalculator.SyncPaintingFromPlaster(store);
         foreach (var r in MaterialsCalculator.FilterByLevels(store.Painting, filter))
             lines.AddRange(LinesForRow("painting", r));
         foreach (var r in MaterialsCalculator.FilterByLevels(store.Waterproofing, filter))
@@ -144,6 +153,10 @@ public static class CivilBoqCalculator
             lines.AddRange(LinesForRow("parapet", r));
         foreach (var r in MaterialsCalculator.FilterByLevels(store.PlinthProtection, filter))
             lines.AddRange(LinesForRow("plinth_protection", r));
+        foreach (var r in MaterialsCalculator.FilterByLevels(store.Doors, filter))
+            lines.AddRange(LinesForRow("doors", r));
+        foreach (var r in MaterialsCalculator.FilterByLevels(store.Windows, filter))
+            lines.AddRange(LinesForRow("windows", r));
 
         return lines;
     }
@@ -193,26 +206,57 @@ public static class CivilBoqCalculator
         return po;
     }
 
-    private static IEnumerable<CivilLine> LinesForRow(string kind, Dictionary<string, string> r) => kind switch
+    private static IEnumerable<CivilLine> LinesForRow(string kind, Dictionary<string, string> r)
     {
-        "masonry" => MasonryLines(r),
-        "plaster" => PlasterLines(r),
-        "pcc" => PccLines(r),
-        "earthwork" => EarthLines(r),
-        "ssm" => SsmLines(r),
-        "shuttering" => ShutteringLines(r),
-        "flooring" => FlooringLines(r),
-        "painting" => PaintingLines(r),
-        "waterproofing" => WaterproofingLines(r),
-        "dpc" => DpcLines(r),
-        "coping" => CopingLines(r),
-        "screed" => ScreedLines(r),
-        "vdf" => VdfLines(r),
-        "skirting" => SkirtingLines(r),
-        "parapet" => ParapetLines(r),
-        "plinth_protection" => PlinthProtectionLines(r),
-        _ => Array.Empty<CivilLine>()
-    };
+        IEnumerable<CivilLine> raw = kind switch
+        {
+            "masonry" => MasonryLines(r),
+            "plaster" => PlasterLines(r),
+            "pcc" => PccLines(r),
+            "earthwork" => EarthLines(r),
+            "ssm" => SsmLines(r),
+            "shuttering" => ShutteringLines(r),
+            "flooring" => FlooringLines(r),
+            "painting" => PaintingLines(r),
+            "waterproofing" => WaterproofingLines(r),
+            "dpc" => DpcLines(r),
+            "coping" => CopingLines(r),
+            "screed" => ScreedLines(r),
+            "vdf" => VdfLines(r),
+            "skirting" => SkirtingLines(r),
+            "parapet" => ParapetLines(r),
+            "plinth_protection" => PlinthProtectionLines(r),
+            "doors" => DoorLines(r),
+            "windows" => WindowLines(r),
+            _ => Array.Empty<CivilLine>()
+        };
+        foreach (var line in raw)
+        {
+            ApplyRowDims(line, r);
+            yield return line;
+        }
+    }
+
+    /// <summary>Copy L/B/H from datasheet (mm) onto the line as metres; fill area/volume from qty when missing.</summary>
+    public static void ApplyRowDims(CivilLine line, Dictionary<string, string> r)
+    {
+        double L = Mm(r, "length");
+        double B = Mm(r, "breadth");
+        if (B <= 0) B = Mm(r, "width");
+        double H = Mm(r, "height");
+        if (H <= 0) H = Mm(r, "depth");
+        double T = F(r, "thickness");
+        if (B <= 0 && T > 0) B = T;
+
+        if (line.LengthM <= 0 && L > 0) line.LengthM = Round3(L / 1000.0);
+        if (line.BreadthM <= 0 && B > 0) line.BreadthM = Round3(B / 1000.0);
+        if (line.HeightM <= 0 && H > 0) line.HeightM = Round3(H / 1000.0);
+
+        if (line.AreaM2 <= 0 && line.Unit.Equals("m²", StringComparison.OrdinalIgnoreCase))
+            line.AreaM2 = line.Qty;
+        if (line.VolumeM3 <= 0 && line.Unit.Equals("m³", StringComparison.OrdinalIgnoreCase))
+            line.VolumeM3 = line.Qty;
+    }
 
     /// <summary>Gross area mm², deducted mm², net mm², note.</summary>
     public static (double grossMm2, double deductMm2, double netMm2, string note) DeductFaceArea(
@@ -242,35 +286,152 @@ public static class CivilBoqCalculator
 
     private static double OpeningAreaMm2(Dictionary<string, string> r, string rule)
     {
-        double a1 = OneOpeningMm2(r, "opening_nos", "opening_l", "opening_h", rule);
-        double a2 = OneOpeningMm2(r, "opening2_nos", "opening2_l", "opening2_h", rule);
-        return a1 + a2;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        double sum = 0;
+
+        void Acc(string key, double areaMm2)
+        {
+            if (areaMm2 <= 0) return;
+            if (!seen.Add(key)) return;
+            sum += areaMm2;
+        }
+
+        Acc("legacy|opening", OneOpeningMm2(r, "opening_nos", "opening_l", "opening_h", rule));
+        Acc("legacy|opening2", OneOpeningMm2(r, "opening2_nos", "opening2_l", "opening2_h", rule));
+
+        string mark = S(r, "mark");
+        string wLevel = MaterialsCalculator.RowLevel(r);
+        if (mark.Length == 0) return sum;
+
+        foreach (var o in ProjectStore.Current.MasonryOpenings)
+        {
+            if (!S(o, "wall_mark").Equals(mark, StringComparison.OrdinalIgnoreCase)) continue;
+            string oLevel = S(o, "level");
+            if (oLevel.Length > 0 && !oLevel.Equals(wLevel, StringComparison.OrdinalIgnoreCase)) continue;
+            string key = OpeningDedupKey(o, "nos", "opening_l", "opening_h");
+            Acc(key, OneOpeningMm2(o, "nos", "opening_l", "opening_h", rule));
+        }
+
+        // Doors / windows linked to this wall (deduct_from_wall Yes by default)
+        foreach (var d in ProjectStore.Current.Doors)
+        {
+            if (!S(d, "wall_mark").Equals(mark, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!DeductFromWall(d)) continue;
+            string oLevel = MaterialsCalculator.RowLevel(d);
+            if (oLevel.Length > 0 && !oLevel.Equals(wLevel, StringComparison.OrdinalIgnoreCase)) continue;
+            string key = OpeningDedupKey(d, "nos", "width", "height");
+            Acc(key, ScheduleOpeningMm2(d, "nos", "width", "height", rule));
+        }
+        foreach (var w in ProjectStore.Current.Windows)
+        {
+            if (!S(w, "wall_mark").Equals(mark, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!DeductFromWall(w)) continue;
+            string oLevel = MaterialsCalculator.RowLevel(w);
+            if (oLevel.Length > 0 && !oLevel.Equals(wLevel, StringComparison.OrdinalIgnoreCase)) continue;
+            string key = OpeningDedupKey(w, "nos", "width", "height");
+            Acc(key, ScheduleOpeningMm2(w, "nos", "width", "height", rule));
+        }
+
+        return sum;
     }
+
+    private static bool DeductFromWall(Dictionary<string, string> row)
+    {
+        string v = S(row, "deduct_from_wall", "Yes");
+        return !v.Equals("No", StringComparison.OrdinalIgnoreCase)
+               && !v.Equals("0", StringComparison.OrdinalIgnoreCase)
+               && !v.Equals("false", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string OpeningDedupKey(Dictionary<string, string> r, string nKey, string lKey, string hKey)
+    {
+        string tid = S(r, "takeoff_id");
+        if (tid.Length > 0) return "to|" + tid;
+        return string.Join("|",
+            S(r, "wall_mark"),
+            MaterialsCalculator.RowLevel(r),
+            InvKey(F(r, nKey)),
+            InvKey(F(r, lKey)),
+            InvKey(F(r, hKey)));
+    }
+
+    private static string InvKey(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+
+    private static double ScheduleOpeningMm2(
+        Dictionary<string, string> r, string nKey, string lKey, string hKey, string rule) =>
+        OneOpeningMm2(r, nKey, lKey, hKey, rule);
 
     private static double OneOpeningMm2(Dictionary<string, string> r, string nKey, string lKey, string hKey, string rule)
     {
         double openL = Mm(r, lKey), openH = Mm(r, hKey);
         int openN = (int)F(r, nKey);
+        if (openN <= 0 && nKey == "nos") openN = (int)F(r, "opening_nos");
         if (openN <= 0 && (openL > 0 || openH > 0)) openN = 1;
         if (openN <= 0 || openL <= 0 || openH <= 0) return 0;
         double eachMm2 = openL * openH;
-        // IS 1200 masonry practice: ignore openings below threshold (default 0.1 m²)
-        if (rule.Contains("masonry", StringComparison.OrdinalIgnoreCase))
+        double eachM2 = eachMm2 / 1e6;
+
+        // IS 1200 masonry: ignore openings below threshold (default 0.1 m²)
+        bool masonryRule = rule.Contains("masonry", StringComparison.OrdinalIgnoreCase)
+                           && rule.Contains("1200", StringComparison.OrdinalIgnoreCase);
+        if (masonryRule || rule.Equals("IS1200 masonry", StringComparison.OrdinalIgnoreCase))
         {
-            double eachM2 = eachMm2 / 1e6;
             if (eachM2 < Y.IgnoreOpeningBelowM2) return 0;
         }
+
+        // Openings full / plaster / paint: always full deduct of measured openings
         return openN * eachMm2;
     }
 
     private static double JambAreaMm2(Dictionary<string, string> r)
     {
-        // Simple: perimeter of openings × reveal depth (default 100 mm)
+        // Reveal: explicit jamb_depth, else wall thickness, else 100 mm
         double reveal = Mm(r, "jamb_depth");
+        if (reveal <= 0) reveal = F(r, "thickness");
         if (reveal <= 0) reveal = 100;
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         double sum = 0;
-        sum += JambFor(r, "opening_nos", "opening_l", "opening_h", reveal);
-        sum += JambFor(r, "opening2_nos", "opening2_l", "opening2_h", reveal);
+        void Acc(string key, double area)
+        {
+            if (area <= 0) return;
+            if (!seen.Add(key)) return;
+            sum += area;
+        }
+
+        Acc("legacy|opening", JambFor(r, "opening_nos", "opening_l", "opening_h", reveal));
+        Acc("legacy|opening2", JambFor(r, "opening2_nos", "opening2_l", "opening2_h", reveal));
+
+        string mark = S(r, "mark");
+        string wLevel = MaterialsCalculator.RowLevel(r);
+        if (mark.Length == 0) return sum;
+
+        foreach (var o in ProjectStore.Current.MasonryOpenings)
+        {
+            if (!S(o, "wall_mark").Equals(mark, StringComparison.OrdinalIgnoreCase)) continue;
+            string oLevel = S(o, "level");
+            if (oLevel.Length > 0 && !oLevel.Equals(wLevel, StringComparison.OrdinalIgnoreCase)) continue;
+            Acc(OpeningDedupKey(o, "nos", "opening_l", "opening_h"),
+                JambFor(o, "nos", "opening_l", "opening_h", reveal));
+        }
+        foreach (var d in ProjectStore.Current.Doors)
+        {
+            if (!S(d, "wall_mark").Equals(mark, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!DeductFromWall(d)) continue;
+            string oLevel = MaterialsCalculator.RowLevel(d);
+            if (oLevel.Length > 0 && !oLevel.Equals(wLevel, StringComparison.OrdinalIgnoreCase)) continue;
+            Acc(OpeningDedupKey(d, "nos", "width", "height"),
+                JambFor(d, "nos", "width", "height", reveal));
+        }
+        foreach (var w in ProjectStore.Current.Windows)
+        {
+            if (!S(w, "wall_mark").Equals(mark, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!DeductFromWall(w)) continue;
+            string oLevel = MaterialsCalculator.RowLevel(w);
+            if (oLevel.Length > 0 && !oLevel.Equals(wLevel, StringComparison.OrdinalIgnoreCase)) continue;
+            Acc(OpeningDedupKey(w, "nos", "width", "height"),
+                JambFor(w, "nos", "width", "height", reveal));
+        }
         return sum;
     }
 
@@ -305,15 +466,15 @@ public static class CivilBoqCalculator
             Notes = $"{unitType}; {note}"
         };
 
-        if (Math.Abs(thick - 110) < 1)
+        if (Math.Abs(thick - 110) < 1 || thick <= 120)
         {
             double areaM2 = netMm2 / 1e6;
             line.Unit = "m²";
             line.Qty = Round3(areaM2);
             line.AreaM2 = line.Qty;
-            line.Description = $"Masonry wall 110 mm ({unitType})";
+            line.Description = $"Masonry wall {thick:0} mm ({unitType})";
             YieldUnits(line, unitType, blockSize, volumeM3: 0, areaM2: areaM2, is110: true);
-            YieldMortar(line, mortar, volumeM3: areaM2 * 0.110 * Y.MortarFraction);
+            YieldMortar(line, mortar, volumeM3: areaM2 * (thick / 1000.0) * Y.MortarFraction);
         }
         else
         {
@@ -332,17 +493,35 @@ public static class CivilBoqCalculator
 
     private static IEnumerable<CivilLine> PlasterLines(Dictionary<string, string> r)
     {
-        double L = Mm(r, "length"), H = Mm(r, "height");
-        string rule = S(r, "deduct_rule", "IS1200 plaster/paint");
-        bool addJambs = S(r, "add_jambs", "No").Equals("Yes", StringComparison.OrdinalIgnoreCase);
-        var (_, _, netMm2, note) = DeductFaceArea(L, H, r, rule, addJambs);
-        double areaM2 = netMm2 / 1e6;
+        double areaFromStore = F(r, "area_m2");
+        double areaM2;
+        string note;
+        if (areaFromStore > 0 && GetSource(r).StartsWith("auto_", StringComparison.OrdinalIgnoreCase))
+        {
+            areaM2 = areaFromStore;
+            note = S(r, "notes", "finalized finish");
+        }
+        else if (areaFromStore > 0 && F(r, "length") <= 0 && F(r, "height") <= 0)
+        {
+            areaM2 = areaFromStore;
+            note = S(r, "notes", "area entry");
+        }
+        else
+        {
+            double L = Mm(r, "length"), H = Mm(r, "height");
+            string rule = S(r, "deduct_rule", "IS1200 plaster/paint");
+            bool addJambs = S(r, "add_jambs", "No").Equals("Yes", StringComparison.OrdinalIgnoreCase);
+            var (_, _, netMm2, n) = DeductFaceArea(L, H, r, rule, addJambs);
+            note = n;
+            areaM2 = netMm2 / 1e6;
+            int faces = (int)F(r, "faces");
+            if (faces < 1) faces = 1;
+            areaM2 *= faces;
+        }
+
         double thickMm = F(r, "thickness");
         if (thickMm <= 0) thickMm = 12;
         string mix = S(r, "mortar_mix", "1:4");
-        int faces = (int)F(r, "faces");
-        if (faces < 1) faces = 1;
-        areaM2 *= faces;
 
         double wet = areaM2 * (thickMm / 1000.0);
         var line = new CivilLine
@@ -350,7 +529,7 @@ public static class CivilBoqCalculator
             Element = "Plaster",
             Mark = S(r, "mark", "PL1"),
             Level = MaterialsCalculator.RowLevel(r),
-            Description = $"Plaster {thickMm:0} mm · CM {mix}" + (faces > 1 ? $" · {faces} faces" : ""),
+            Description = $"Plaster {thickMm:0} mm · CM {mix}",
             Unit = "m²",
             Qty = Round3(areaM2),
             AreaM2 = Round3(areaM2),
@@ -359,6 +538,8 @@ public static class CivilBoqCalculator
         YieldMortar(line, mix, volumeM3: wet);
         if (line.Qty > 0) yield return line;
     }
+
+    private static string GetSource(Dictionary<string, string> r) => S(r, "source", "");
 
     private static IEnumerable<CivilLine> PccLines(Dictionary<string, string> r)
     {
@@ -449,42 +630,64 @@ public static class CivilBoqCalculator
         // Treat as plan area L×B with opening deduct (use height field as breadth for DeductFaceArea)
         var (_, _, netMm2, note) = DeductFaceArea(L, B, r, rule, addJambs: false);
         double areaM2 = netMm2 / 1e6;
+        string surface = S(r, "surface_kind", "Floor");
+        string finish = S(r, "finish_type", "Vitrified tiles");
+        string size = S(r, "tile_size", "600×600");
+        string code = FinishCatalog.FloorItemCode(surface, finish, size);
         yield return new CivilLine
         {
-            Element = "Flooring",
+            Element = surface.Equals("Wall", StringComparison.OrdinalIgnoreCase) ? "Wall tiles" : "Flooring",
             Mark = S(r, "mark", "FL1"),
             Level = MaterialsCalculator.RowLevel(r),
-            Description = $"Flooring · {S(r, "finish_type", "Tile")}",
+            Description = FinishCatalog.FloorDescription(surface, finish, size),
             Unit = "m²",
             Qty = Round3(areaM2),
             AreaM2 = Round3(areaM2),
-            Notes = note
+            Notes = note,
+            ItemCode = code
         };
     }
 
     private static IEnumerable<CivilLine> PaintingLines(Dictionary<string, string> r)
     {
-        double L = Mm(r, "length"), H = Mm(r, "height");
-        string rule = S(r, "deduct_rule", "IS1200 plaster/paint");
-        bool addJambs = S(r, "add_jambs", "No").Equals("Yes", StringComparison.OrdinalIgnoreCase);
-        var (_, _, netMm2, note) = DeductFaceArea(L, H, r, rule, addJambs);
-        double areaM2 = netMm2 / 1e6;
-        int faces = (int)F(r, "faces");
-        if (faces < 1) faces = 1;
-        areaM2 *= faces;
+        double areaFromStore = F(r, "area_m2");
+        double areaM2;
+        string note;
+        if (areaFromStore > 0 && (GetSource(r).StartsWith("auto_", StringComparison.OrdinalIgnoreCase)
+                                  || (F(r, "length") <= 0 && F(r, "height") <= 0)))
+        {
+            areaM2 = areaFromStore;
+            note = S(r, "notes", "finalized finish");
+        }
+        else
+        {
+            double L = Mm(r, "length"), H = Mm(r, "height");
+            string rule = S(r, "deduct_rule", "IS1200 plaster/paint");
+            bool addJambs = S(r, "add_jambs", "No").Equals("Yes", StringComparison.OrdinalIgnoreCase);
+            var (_, _, netMm2, n) = DeductFaceArea(L, H, r, rule, addJambs);
+            note = n;
+            areaM2 = netMm2 / 1e6;
+            int faces = (int)F(r, "faces");
+            if (faces < 1) faces = 1;
+            areaM2 *= faces;
+        }
+        string location = S(r, "paint_location", "Inside walls");
+        string paintType = S(r, "paint_type", "Emulsion");
+        string system = S(r, "paint_system", "2 coat primer + 3 coat putty + 2 coat paint");
         int coats = (int)F(r, "coats");
-        if (coats < 1) coats = 1;
-        // qty is surface area (not × coats) — coats noted
+        if (coats < 1) coats = 2;
+        string code = FinishCatalog.PaintItemCode(location, paintType, system);
         yield return new CivilLine
         {
             Element = "Painting",
             Mark = S(r, "mark", "PT1"),
             Level = MaterialsCalculator.RowLevel(r),
-            Description = $"Painting · {S(r, "paint_type", "Emulsion")} · {coats} coat(s)",
+            Description = FinishCatalog.PaintDescription(location, paintType, system),
             Unit = "m²",
             Qty = Round3(areaM2),
             AreaM2 = Round3(areaM2),
-            Notes = note
+            Notes = string.IsNullOrWhiteSpace(note) ? $"finish coats {coats}" : $"{note} · finish coats {coats}",
+            ItemCode = code
         };
     }
 
@@ -648,8 +851,119 @@ public static class CivilBoqCalculator
             Qty = Round3(areaM2),
             AreaM2 = Round3(areaM2),
             VolumeM3 = Round3(vol),
-            Notes = $"t={T:0} mm"
+            Notes = $"t={T:0} mm",
+            ItemCode = "PP-STD"
         };
+    }
+
+    private static IEnumerable<CivilLine> DoorLines(Dictionary<string, string> r)
+    {
+        int nos = Math.Max(1, (int)F(r, "nos"));
+        double W = Mm(r, "width"), H = Mm(r, "height");
+        if (W <= 0 || H <= 0) yield break;
+        double areaEach = (W * H) / 1e6;
+        double area = areaEach * nos;
+        string doorType = S(r, "door_type", "Wood door");
+        string frame = S(r, "frame_size", "110×150");
+        string thick = S(r, "shutter_thick", "32 mm");
+        string shutter = S(r, "shutter_type", "Block Board");
+        string woodFinish = S(r, "wood_finish", "Varnish");
+        string code = DoorWindowCatalog.DoorItemCode(doorType, frame, thick, shutter);
+        string desc = DoorWindowCatalog.DoorDescription(doorType, frame, thick, shutter, woodFinish);
+        yield return new CivilLine
+        {
+            Element = "Doors",
+            Mark = S(r, "mark", "D1"),
+            Level = MaterialsCalculator.RowLevel(r),
+            Description = desc,
+            Unit = "m²",
+            Qty = Round3(area),
+            AreaM2 = Round3(area),
+            Notes = $"{nos} nos · {W:0}×{H:0} mm · {code}",
+            ItemCode = code
+        };
+        yield return new CivilLine
+        {
+            Element = "Doors",
+            Mark = S(r, "mark", "D1"),
+            Level = MaterialsCalculator.RowLevel(r),
+            Description = desc + " (count)",
+            Unit = "nos",
+            Qty = nos,
+            Notes = $"{W:0}×{H:0} mm",
+            ItemCode = code + "-NOS"
+        };
+        // Wood varnish / polish / paint included with door schedule
+        if (!doorType.Equals("MS door", StringComparison.OrdinalIgnoreCase)
+            && !woodFinish.StartsWith("None", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return new CivilLine
+            {
+                Element = "Doors",
+                Mark = S(r, "mark", "D1"),
+                Level = MaterialsCalculator.RowLevel(r),
+                Description = $"Door wood finish · {woodFinish}",
+                Unit = "m²",
+                Qty = Round3(area),
+                AreaM2 = Round3(area),
+                Notes = $"{nos} nos · both faces approx.",
+                ItemCode = FinishCatalog.WoodFinishCode(woodFinish)
+            };
+        }
+    }
+
+    private static IEnumerable<CivilLine> WindowLines(Dictionary<string, string> r)
+    {
+        int nos = Math.Max(1, (int)F(r, "nos"));
+        double W = Mm(r, "width"), H = Mm(r, "height");
+        if (W <= 0 || H <= 0) yield break;
+        double areaEach = (W * H) / 1e6;
+        double area = areaEach * nos;
+        string system = S(r, "window_system", "System Aluminium");
+        string track = S(r, "track", "2.5 Track");
+        string woodOpen = S(r, "wood_opening", "Single shutter — open outside");
+        string woodFinish = S(r, "wood_finish", "Varnish");
+        string code = DoorWindowCatalog.WindowCode(system, track, woodOpen);
+        string desc = DoorWindowCatalog.WindowDescription(system, track, woodOpen, woodFinish);
+        yield return new CivilLine
+        {
+            Element = "Windows",
+            Mark = S(r, "mark", "W1"),
+            Level = MaterialsCalculator.RowLevel(r),
+            Description = desc,
+            Unit = "m²",
+            Qty = Round3(area),
+            AreaM2 = Round3(area),
+            Notes = $"{nos} nos · {W:0}×{H:0} mm · {code}",
+            ItemCode = code
+        };
+        yield return new CivilLine
+        {
+            Element = "Windows",
+            Mark = S(r, "mark", "W1"),
+            Level = MaterialsCalculator.RowLevel(r),
+            Description = desc + " (count)",
+            Unit = "nos",
+            Qty = nos,
+            Notes = $"{W:0}×{H:0} mm",
+            ItemCode = code + "-NOS"
+        };
+        if (system.Equals("Wooden", StringComparison.OrdinalIgnoreCase)
+            && !woodFinish.StartsWith("None", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return new CivilLine
+            {
+                Element = "Windows",
+                Mark = S(r, "mark", "W1"),
+                Level = MaterialsCalculator.RowLevel(r),
+                Description = $"Window wood finish · {woodFinish}",
+                Unit = "m²",
+                Qty = Round3(area),
+                AreaM2 = Round3(area),
+                Notes = $"{nos} nos",
+                ItemCode = FinishCatalog.WoodFinishCode(woodFinish)
+            };
+        }
     }
 
     private static void ApplyPccMaterials(CivilLine line, double volM3, string mix)

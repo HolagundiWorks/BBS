@@ -360,6 +360,16 @@ public sealed class SectionDiagram : UserControl
             case "shuttering":
             case "flooring":
             case "painting":
+            case "doors":
+            case "windows":
+            case "waterproofing":
+            case "dpc":
+            case "coping":
+            case "screed":
+            case "vdf":
+            case "skirting":
+            case "parapet":
+            case "plinth_protection":
                 DrawCivilBox(muted, line, accent); break;
             default: DrawBeam(muted, line, accent); break;
         }
@@ -371,7 +381,8 @@ public sealed class SectionDiagram : UserControl
         double B = Math.Max(_snap.B > 0 ? _snap.B : _snap.D, 1);
         double H = Math.Max(_snap.Height > 0 ? _snap.Height : _snap.D, 1);
         // Prefer length × height for walls/plaster; L×B×H for volumes
-        bool isArea = _kind is "plaster" or "shuttering" or "flooring" or "painting"
+        bool isArea = _kind is "plaster" or "shuttering" or "flooring" or "painting" or "doors" or "windows"
+            or "waterproofing" or "skirting" or "dpc" or "screed" or "vdf" or "plinth_protection"
             || (_kind == "masonry" && Math.Abs(B - 110) < 1);
         const double boxW = 220, boxH = 140;
         double scale = isArea
@@ -411,6 +422,8 @@ public sealed class SectionDiagram : UserControl
             "shuttering" => "Shuttering",
             "flooring" => "Flooring",
             "painting" => "Painting",
+            "doors" => "Door",
+            "windows" => "Window",
             _ => "Civil"
         };
         Label(x + w / 2, y - 14, title, muted, 9);

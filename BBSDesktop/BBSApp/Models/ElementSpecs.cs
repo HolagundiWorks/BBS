@@ -15,6 +15,8 @@ public sealed class FieldDef
     public string? ShowWhenKey { get; init; }
     public string[]? ShowWhenValues { get; init; }
     public string? Hint { get; init; }
+    /// <summary>Sheet group: "entry" (default) or "deductions".</summary>
+    public string SheetTab { get; init; } = "entry";
 }
 
 public sealed class ExtraPanelDef
@@ -39,6 +41,8 @@ public sealed class ElementSpec
     public bool IsCivilBoq { get; init; }
     /// <summary>Sheet is derived from RCC concrete members — no manual geometry entry.</summary>
     public bool IsComputedFromRcc { get; init; }
+    /// <summary>Finish reconcile sheet (walls + RCC exposure) before Finalize to plaster/paint.</summary>
+    public bool IsFinishReconcile { get; init; }
 }
 
 /// <summary>Field labels follow IS 456 : 2000 nomenclature (and IS 2502 for detailing).</summary>
@@ -59,10 +63,19 @@ public static class ElementSpecs
         {
             Key = f.Key, Label = f.Label, Kind = f.Kind, Default = f.Default,
             Options = f.Options, OptionalDia = f.OptionalDia, Hint = f.Hint,
+            SheetTab = f.SheetTab,
             ShowWhenKey = key, ShowWhenValues = values
         };
         return f;
     }
+
+    public static FieldDef Tab(FieldDef f, string sheetTab) => new()
+    {
+        Key = f.Key, Label = f.Label, Kind = f.Kind, Default = f.Default,
+        Options = f.Options, OptionalDia = f.OptionalDia, Hint = f.Hint,
+        ShowWhenKey = f.ShowWhenKey, ShowWhenValues = f.ShowWhenValues,
+        SheetTab = sheetTab
+    };
 
     public static ElementSpec Columns() => new()
     {
@@ -423,10 +436,10 @@ public static class ElementSpecs
     public static ElementSpec MasonryWalls() => new()
     {
         Kind = "masonry", Title = "Masonry walls",
-        Subtitle = "230 mm → m³ · 110 mm → m². IS 1200 opening deducts. Bricks / ACC / cement blocks + mortar.",
-        TypeKey = "thickness",
+        Subtitle = "Wall build sets unit + thickness (+ block size). Openings on Deductions tab (or takeoff Commit). Doors/Windows with wall_mark also deduct. ≤120 mm → m²; thicker → m³.",
+        TypeKey = "wall_build",
         IsCivilBoq = true,
-        InputKeys = new[] { "mark", "level", "length", "height", "thickness", "unit_type" },
+        InputKeys = new[] { "mark", "length", "height", "wall_build" },
         Fields = new()
         {
             Sec("Identification"),
@@ -435,56 +448,58 @@ public static class ElementSpecs
             Sec("Geometry (mm)"),
             Text("length", "Length L", "5000"),
             Text("height", "Height H", "3000"),
-            Combo("thickness", "Wall thickness", new[] { "230", "110" }, "230",
-                "230 mm measured in m³; 110 mm measured in m²"),
-            Sec("Openings (IS 1200)"),
+            Combo("wall_build", "Wall build",
+                new[]
+                {
+                    "Brick · 230 mm", "Brick · 110 mm",
+                    "ACC · 100 mm", "ACC · 150 mm", "ACC · 200 mm",
+                    "Cement block · 100 mm", "Cement block · 150 mm", "Cement block · 200 mm"
+                },
+                "Brick · 230 mm",
+                "Combines unit type + wall thickness; block size is set automatically"),
+            Combo("mortar_mix", "Mortar mix (CM)", new[] { "1:4", "1:5", "1:6", "1:8" }, "1:6"),
             Combo("deduct_rule", "Deduction rule",
                 new[] { "None", "Openings full", "IS1200 masonry" }, "IS1200 masonry",
-                "IS1200 masonry ignores openings < 0.1 m²"),
-            Text("opening_nos", "No. of openings (type 1)", "0"),
-            Text("opening_l", "Opening 1 width (mm)", "0"),
-            Text("opening_h", "Opening 1 height (mm)", "0"),
-            Text("opening2_nos", "No. of openings (type 2)", "0"),
-            Text("opening2_l", "Opening 2 width (mm)", "0"),
-            Text("opening2_h", "Opening 2 height (mm)", "0"),
-            Sec("Units & mortar"),
+                "IS1200 masonry ignores openings < 0.1 m² — openings listed on Deductions tab"),
+            // Derived — hidden on sheet
             Combo("unit_type", "Unit type", new[] { "Brick", "ACC Block", "Cement Block" }, "Brick"),
-            When(Combo("block_size", "Block size (mm)",
+            Combo("thickness", "Wall thickness", new[] { "230", "110", "100", "150", "200" }, "230"),
+            Combo("block_size", "Block size (mm)",
                 new[] { "600x200x100", "600x200x150", "600x200x200", "400x200x200", "400x200x150" },
-                "600x200x150"), "unit_type", "ACC Block", "Cement Block"),
-            Combo("mortar_mix", "Mortar mix (CM)", new[] { "1:4", "1:5", "1:6", "1:8" }, "1:6"),
+                "600x200x150"),
         }
     };
 
     public static ElementSpec Plaster() => new()
     {
         Kind = "plaster", Title = "Plastering",
-        Subtitle = "m² take-off with IS 1200 deducts + optional jambs; cement & sand for mortar.",
-        TypeKey = "thickness",
+        Subtitle = "Reconcile wall (both faces) + RCC exposed surfaces, then Finalize. Painting qty follows plaster.",
+        TypeKey = "member_type",
         IsCivilBoq = true,
-        InputKeys = new[] { "mark", "level", "length", "height", "thickness" },
+        IsFinishReconcile = true,
+        InputKeys = new[] { "mark", "member_type", "area_m2", "include" },
         Fields = new()
         {
-            Sec("Identification"),
-            Text("mark", "Mark", "PL1"),
+            Sec("Reconcile (from walls & RCC)"),
+            Text("mark", "Mark", "FN1"),
             Combo("level", "Storey", new[] { "Lvl0" }, "Lvl0"),
-            Sec("Surface (mm)"),
-            Text("length", "Length L", "5000"),
-            Text("height", "Height H", "3000"),
+            Combo("member_type", "Source",
+                new[] { "Wall", "Column", "Pedestal", "Beam", "Lintel", "Slab" }, "Wall"),
+            Text("source_mark", "Source mark", ""),
+            Combo("include", "Include", new[] { "Yes", "No" }, "Yes"),
+            Text("area_m2", "Plaster area (m²)", "0"),
+            Combo("faces", "Wall faces", new[] { "1", "2" }, "2", "Masonry walls only"),
+            Combo("sides_exposed", "Column sides exposed", new[] { "0", "1", "2", "3", "4" }, "3",
+                "0–4; typical 3 when one face against wall"),
+            Combo("plaster_sides", "Beam sides", new[] { "Yes", "No" }, "Yes"),
+            Combo("plaster_soffit", "Beam soffit", new[] { "Yes", "No" }, "No"),
+            Combo("plaster_ceiling", "Slab ceiling", new[] { "Yes", "No" }, "No"),
+            Text("notes", "Notes", ""),
+            // Manual final rows (Final tab / form)
+            Sec("Manual plaster (Final sheet)"),
+            Text("length", "Length L (manual)", "0"),
+            Text("height", "Height H (manual)", "0"),
             Combo("thickness", "Plaster thickness", new[] { "6", "12", "15", "20" }, "12"),
-            Combo("faces", "No. of faces", new[] { "1", "2" }, "1", "2 = both sides"),
-            Sec("Openings (IS 1200)"),
-            Combo("deduct_rule", "Deduction rule",
-                new[] { "None", "Openings full", "IS1200 plaster/paint" }, "IS1200 plaster/paint"),
-            Combo("add_jambs", "Add jambs / reveals", new[] { "No", "Yes" }, "No"),
-            Text("jamb_depth", "Jamb depth (mm)", "100"),
-            Text("opening_nos", "No. of openings (type 1)", "0"),
-            Text("opening_l", "Opening 1 width (mm)", "0"),
-            Text("opening_h", "Opening 1 height (mm)", "0"),
-            Text("opening2_nos", "No. of openings (type 2)", "0"),
-            Text("opening2_l", "Opening 2 width (mm)", "0"),
-            Text("opening2_h", "Opening 2 height (mm)", "0"),
-            Sec("Mortar"),
             Combo("mortar_mix", "Mortar mix (CM)", new[] { "1:3", "1:4", "1:5", "1:6" }, "1:4"),
         }
     };
@@ -582,20 +597,24 @@ public static class ElementSpecs
 
     public static ElementSpec Flooring() => new()
     {
-        Kind = "flooring", Title = "Flooring",
-        Subtitle = "L × B → m² with opening deducts (qty only).",
+        Kind = "flooring", Title = "Flooring / wall tiles",
+        Subtitle = "Floor or wall tiles — vitrified / ceramic sizes, granite, marble. L × B → m² with opening deducts.",
         TypeKey = "finish_type",
         IsCivilBoq = true,
-        InputKeys = new[] { "mark", "level", "length", "breadth", "finish_type" },
+        InputKeys = new[] { "mark", "level", "surface_kind", "finish_type", "length", "breadth" },
         Fields = new()
         {
             Sec("Identification"),
             Text("mark", "Mark", "FL1"),
             Combo("level", "Storey", new[] { "Lvl0" }, "Lvl0"),
-            Combo("finish_type", "Finish", new[] { "Tile", "Kota", "Granite", "IPS", "Other" }, "Tile"),
-            Sec("Plan (mm)"),
+            Combo("surface_kind", "Surface", FinishCatalog.SurfaceKinds, "Floor"),
+            Combo("finish_type", "Finish", FinishCatalog.FloorFinishTypes, "Vitrified tiles",
+                "Wall: use Ceramic / Vitrified / Granite / Marble — same tile sizes as floor"),
+            Combo("tile_size", "Tile size", FinishCatalog.TileSizes, "600×600",
+                "For vitrified & ceramic (floor or wall)"),
+            Sec("Plan / face (mm)"),
             Text("length", "Length L", "4000"),
-            Text("breadth", "Breadth B", "3000"),
+            Text("breadth", "Breadth / height B", "3000", "Floor plan B, or wall height for wall tiles"),
             Sec("Openings (deduct)"),
             Combo("deduct_rule", "Deduction rule",
                 new[] { "None", "Openings full", "IS1200 masonry" }, "Openings full"),
@@ -608,29 +627,27 @@ public static class ElementSpecs
     public static ElementSpec Painting() => new()
     {
         Kind = "painting", Title = "Painting",
-        Subtitle = "L × H × faces → m² with IS 1200 plaster-style deducts (qty only).",
+        Subtitle = "Area from Plastering. Spec: primer / putty / paint coats · emulsion / distemper · inside / outside.",
         TypeKey = "paint_type",
         IsCivilBoq = true,
-        InputKeys = new[] { "mark", "level", "length", "height", "paint_type" },
+        InputKeys = new[] { "mark", "level", "area_m2", "paint_type", "paint_location" },
         Fields = new()
         {
-            Sec("Identification"),
+            Sec("From plastering"),
             Text("mark", "Mark", "PT1"),
             Combo("level", "Storey", new[] { "Lvl0" }, "Lvl0"),
-            Combo("paint_type", "Paint type", new[] { "Emulsion", "Enamel", "Primer", "Other" }, "Emulsion"),
-            Sec("Surface (mm)"),
-            Text("length", "Length L", "5000"),
-            Text("height", "Height H", "3000"),
+            Combo("paint_location", "Location", FinishCatalog.PaintLocations, "Inside walls"),
+            Combo("paint_type", "Paint type", FinishCatalog.PaintTypes, "Emulsion"),
+            Combo("paint_system", "Paint system", FinishCatalog.PaintSystems,
+                "2 coat primer + 3 coat putty + 2 coat paint"),
+            Combo("coats", "Finish coats (note)", new[] { "1", "2", "3" }, "2"),
+            Text("area_m2", "Paint area (m²)", "0", "Synced from plaster — edit plaster to change qty"),
+            Text("source_mark", "Source mark", ""),
+            Text("notes", "Notes", ""),
+            Sec("Extra (manual only)"),
+            Text("length", "Length L (manual extra)", "0"),
+            Text("height", "Height H (manual extra)", "0"),
             Combo("faces", "No. of faces", new[] { "1", "2" }, "1"),
-            Combo("coats", "Coats (note)", new[] { "1", "2", "3" }, "2"),
-            Sec("Openings (IS 1200)"),
-            Combo("deduct_rule", "Deduction rule",
-                new[] { "None", "Openings full", "IS1200 plaster/paint" }, "IS1200 plaster/paint"),
-            Combo("add_jambs", "Add jambs / reveals", new[] { "No", "Yes" }, "No"),
-            Text("jamb_depth", "Jamb depth (mm)", "100"),
-            Text("opening_nos", "No. of openings", "0"),
-            Text("opening_l", "Opening width (mm)", "0"),
-            Text("opening_h", "Opening height (mm)", "0"),
         }
     };
 
@@ -777,6 +794,73 @@ public static class ElementSpecs
             Text("breadth", "Width of apron (mm)", "600"),
             Text("thickness", "Thickness (mm)", "50"),
             Combo("finish_type", "Finish", new[] { "PCC", "Brick", "Tile", "Other" }, "PCC"),
+        }
+    };
+
+    public static ElementSpec Doors() => new()
+    {
+        Kind = "doors", Title = "Doors",
+        Subtitle = "MS or wood door schedule — Nos × opening area (m²). Link wall_mark to deduct from masonry.",
+        TypeKey = "door_type",
+        IsCivilBoq = true,
+        InputKeys = new[] { "mark", "level", "door_type", "wall_mark", "nos", "width", "height" },
+        Fields = new()
+        {
+            Sec("Identification"),
+            Text("mark", "Mark", "D1"),
+            Combo("level", "Storey", new[] { "Lvl0" }, "Lvl0"),
+            Combo("door_type", "Door type", DoorWindowCatalog.DoorTypes, "Wood door"),
+            Combo("wall_mark", "On wall (deduct)", new[] { "" }, "",
+                "Masonry wall mark — opening deducted from that wall’s qty"),
+            Combo("deduct_from_wall", "Deduct from wall", new[] { "Yes", "No" }, "Yes"),
+            Text("nos", "Nos", "1"),
+            Sec("Opening (mm)"),
+            Text("width", "Width W", "900"),
+            Text("height", "Height H", "2100"),
+            Sec("Wood frame & shutter"),
+            When(Combo("frame_size", "Wood frame", DoorWindowCatalog.WoodFrames, "110×150"),
+                "door_type", "Wood door"),
+            When(Combo("shutter_thick", "Shutter thickness", DoorWindowCatalog.ShutterThicknesses, "32 mm"),
+                "door_type", "Wood door"),
+            When(Combo("shutter_type", "Shutter type", DoorWindowCatalog.ShutterTypeNames, "Block Board"),
+                "door_type", "Wood door"),
+            Combo("wood_finish", "Wood finish", FinishCatalog.WoodFinishes, "Varnish",
+                "Varnish / polish / paint — included with door schedule"),
+            Text("notes", "Notes", ""),
+        }
+    };
+
+    public static ElementSpec Windows() => new()
+    {
+        Kind = "windows", Title = "Windows",
+        Subtitle = "System aluminium / UPVC / wooden — Nos × opening area (m²). Wood finish (varnish/polish/paint) on wooden windows.",
+        TypeKey = "window_system",
+        IsCivilBoq = true,
+        InputKeys = new[] { "mark", "level", "window_system", "wall_mark", "nos", "width", "height" },
+        Fields = new()
+        {
+            Sec("Identification"),
+            Text("mark", "Mark", "W1"),
+            Combo("level", "Storey", new[] { "Lvl0" }, "Lvl0"),
+            Combo("window_system", "System", DoorWindowCatalog.WindowSystems, "System Aluminium"),
+            Combo("wall_mark", "On wall (deduct)", new[] { "" }, "",
+                "Masonry wall mark — opening deducted from that wall’s qty"),
+            Combo("deduct_from_wall", "Deduct from wall", new[] { "Yes", "No" }, "Yes"),
+            Text("nos", "Nos", "1"),
+            Sec("Opening (mm)"),
+            Text("width", "Width W", "1200"),
+            Text("height", "Height H", "1200"),
+            Sec("Aluminium / UPVC"),
+            When(Combo("track", "Track", DoorWindowCatalog.Tracks, "2.5 Track"),
+                "window_system", "System Aluminium", "UPVC"),
+            Sec("Wooden"),
+            When(Combo("wood_opening", "Opening type", DoorWindowCatalog.WoodOpenings,
+                    "Single shutter — open outside"),
+                "window_system", "Wooden"),
+            When(Combo("wood_finish", "Wood finish", FinishCatalog.WoodFinishes, "Varnish",
+                    "Varnish / polish / paint — included with wooden window"),
+                "window_system", "Wooden"),
+            Text("notes", "Notes", ""),
         }
     };
 }

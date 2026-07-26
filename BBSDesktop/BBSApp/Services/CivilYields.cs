@@ -16,4 +16,13 @@ public sealed class CivilYields
     /// When true, beam formwork omits soffit (sides only: 2×D×L) assuming slab formwork covers the underside.
     /// </summary>
     public bool BeamSlabInterfaceDeduct { get; set; }
+
+    /// <summary>Default plaster/paint faces on masonry walls (usually 2).</summary>
+    public int WallPlasterFaces { get; set; } = 2;
+    /// <summary>Default column/pedestal sides exposed to plaster (0–4).</summary>
+    public int DefaultColumnSidesExposed { get; set; } = 3;
+    /// <summary>When true, slab soffit is proposed for plaster by default.</summary>
+    public bool DefaultPlasterCeiling { get; set; }
+    /// <summary>When true, beam soffit is proposed for plaster by default.</summary>
+    public bool DefaultBeamSoffit { get; set; }
 }

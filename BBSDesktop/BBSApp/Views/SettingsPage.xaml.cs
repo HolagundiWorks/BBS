@@ -2,14 +2,69 @@ using System.Globalization;
 using BBSApp.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Storage.Pickers;
+using WinRT.Interop;
 
 namespace BBSApp.Views;
 
 public sealed partial class SettingsPage : Page
 {
-    public SettingsPage()
+    public enum SettingsTab { Project, Engineering, CostPercent }
+
+    private string _pendingLogoPath = "";
+    private readonly SettingsTab _initialTab;
+
+    public SettingsPage(SettingsTab tab = SettingsTab.Project)
     {
+        _initialTab = tab;
         InitializeComponent();
+        LoadProjectFields();
+        LoadEngineeringFields();
+        LoadMarkupFields();
+        Loaded += OnLoaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        Loaded -= OnLoaded;
+        SettingsPivot.SelectedIndex = _initialTab switch
+        {
+            SettingsTab.Engineering => 1,
+            SettingsTab.CostPercent => 2,
+            _ => 0
+        };
+    }
+
+    private void LoadMarkupFields()
+    {
+        var m = ProjectStore.Current.Markups;
+        ElectricalPctBox.Value = m.ElectricalPct;
+        PlumbingPctBox.Value = m.PlumbingPct;
+        EscalationPctBox.Value = m.EscalationPct;
+        ConsultingPctBox.Value = m.ConsultingFeePct;
+    }
+
+    private void LoadProjectFields()
+    {
+        var info = ProjectStore.Current.Info;
+        ProjectNameBox.Text = info.Name;
+        ProjectLocationBox.Text = info.Location;
+        ClientNameBox.Text = info.ClientName;
+        PreparedByRoleBox.SelectedItem = ProjectInfo.PreparedByRoles.Contains(info.PreparedByRole)
+            ? info.PreparedByRole
+            : "Engineer";
+        PreparedByNameBox.Text = info.PreparedByName;
+        CompanyNameBox.Text = info.CompanyName;
+        ContactPhoneBox.Text = info.ContactPhone;
+        ContactEmailBox.Text = info.ContactEmail;
+        AddressBox.Text = info.Address;
+        _pendingLogoPath = info.LogoPath ?? "";
+        RefreshLogoPreview();
+    }
+
+    private void LoadEngineeringFields()
+    {
         var s = ProjectStore.Current;
         DiaBox.Text = string.Join(", ", s.Diameters);
         HysdBondToggle.IsOn = s.HysdBond;
@@ -26,6 +81,10 @@ public sealed partial class SettingsPage : Page
         ShutterWasteBox.Value = y.ShutteringWastage;
         IgnoreOpenBox.Value = y.IgnoreOpeningBelowM2;
         BeamSlabDeductToggle.IsOn = y.BeamSlabInterfaceDeduct;
+        WallFacesBox.Value = y.WallPlasterFaces;
+        ColSidesBox.Value = y.DefaultColumnSidesExposed;
+        PlasterCeilingToggle.IsOn = y.DefaultPlasterCeiling;
+        BeamSoffitToggle.IsOn = y.DefaultBeamSoffit;
         CoverColBox.Value = s.CoverColumnMm;
         CoverBeamBox.Value = s.CoverBeamMm;
         CoverSlabBox.Value = s.CoverSlabMm;
@@ -34,6 +93,62 @@ public sealed partial class SettingsPage : Page
         CoverLintBox.Value = s.CoverLintelMm;
         ColLapBox.SelectedItem = s.DefaultColumnLap is "Yes" or "No" ? s.DefaultColumnLap : "No";
         BeamLapBox.SelectedItem = s.DefaultBeamLap is "None" or "Tension" ? s.DefaultBeamLap : "None";
+    }
+
+    private void RefreshLogoPreview()
+    {
+        var resolved = ProjectInfo.ResolveLogoFile(_pendingLogoPath);
+        if (resolved is null)
+        {
+            LogoPreview.Source = null;
+            LogoPathText.Text = string.IsNullOrWhiteSpace(_pendingLogoPath)
+                ? "No logo selected"
+                : "Logo file missing — browse again";
+            return;
+        }
+
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.UriSource = new Uri(resolved);
+            LogoPreview.Source = bmp;
+            LogoPathText.Text = Path.GetFileName(resolved);
+        }
+        catch
+        {
+            LogoPreview.Source = null;
+            LogoPathText.Text = "Could not load logo preview";
+        }
+    }
+
+    private async void BrowseLogo_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new FileOpenPicker();
+        var hwnd = WindowNative.GetWindowHandle(App.MainWindow!);
+        InitializeWithWindow.Initialize(picker, hwnd);
+        picker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
+        picker.FileTypeFilter.Add(".png");
+        picker.FileTypeFilter.Add(".jpg");
+        picker.FileTypeFilter.Add(".jpeg");
+        picker.FileTypeFilter.Add(".bmp");
+        var file = await picker.PickSingleFileAsync();
+        if (file is null) return;
+
+        try
+        {
+            _pendingLogoPath = await ProjectInfo.ImportLogoAsync(file.Path);
+            RefreshLogoPreview();
+        }
+        catch (Exception ex)
+        {
+            AppNotify.Error("Logo import failed", ex.Message);
+        }
+    }
+
+    private void ClearLogo_Click(object sender, RoutedEventArgs e)
+    {
+        _pendingLogoPath = "";
+        RefreshLogoPreview();
     }
 
     private static string FormatMap(Dictionary<int, double> map) =>
@@ -68,7 +183,29 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
+        var name = (ProjectNameBox.Text ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            AppNotify.Error("Enter a project name.");
+            return;
+        }
+
         var store = ProjectStore.Current;
+        var info = store.Info;
+        info.Name = name;
+        info.Location = (ProjectLocationBox.Text ?? "").Trim();
+        info.ClientName = (ClientNameBox.Text ?? "").Trim();
+        info.PreparedByRole = PreparedByRoleBox.SelectedItem?.ToString() ?? "Engineer";
+        info.PreparedByName = (PreparedByNameBox.Text ?? "").Trim();
+        info.CompanyName = string.IsNullOrWhiteSpace(CompanyNameBox.Text)
+            ? Branding.Company
+            : CompanyNameBox.Text.Trim();
+        info.ContactPhone = (ContactPhoneBox.Text ?? "").Trim();
+        info.ContactEmail = (ContactEmailBox.Text ?? "").Trim();
+        info.Address = (AddressBox.Text ?? "").Trim();
+        info.LogoPath = _pendingLogoPath ?? "";
+        store.Name = info.Name;
+
         store.Diameters.Clear();
         foreach (var d in list.Distinct().OrderBy(x => x))
             store.Diameters.Add(d);
@@ -95,6 +232,10 @@ public sealed partial class SettingsPage : Page
         y.ShutteringWastage = Val(ShutterWasteBox.Value, 1.05);
         y.IgnoreOpeningBelowM2 = Val(IgnoreOpenBox.Value, 0.1);
         y.BeamSlabInterfaceDeduct = BeamSlabDeductToggle.IsOn;
+        y.WallPlasterFaces = (int)Math.Clamp(Val(WallFacesBox.Value, 2), 1, 2);
+        y.DefaultColumnSidesExposed = (int)Math.Clamp(Val(ColSidesBox.Value, 3), 0, 4);
+        y.DefaultPlasterCeiling = PlasterCeilingToggle.IsOn;
+        y.DefaultBeamSoffit = BeamSoffitToggle.IsOn;
 
         store.CoverColumnMm = Val(CoverColBox.Value, 40);
         store.CoverBeamMm = Val(CoverBeamBox.Value, 25);
@@ -105,10 +246,19 @@ public sealed partial class SettingsPage : Page
         store.DefaultColumnLap = ColLapBox.SelectedItem?.ToString() ?? "No";
         store.DefaultBeamLap = BeamLapBox.SelectedItem?.ToString() ?? "None";
 
+        var m = store.Markups;
+        m.ElectricalPct = Pct(ElectricalPctBox.Value, 8);
+        m.PlumbingPct = Pct(PlumbingPctBox.Value, 6);
+        m.EscalationPct = Pct(EscalationPctBox.Value, 5);
+        m.ConsultingFeePct = Pct(ConsultingPctBox.Value, 3);
+
         store.Notify();
-        AppNotify.Success("Settings saved", "IS 456 covers/laps + civil yields.");
+        AppNotify.Success("Settings saved", "Project, engineering, and cost percentages.");
     }
 
     private static double Val(double v, double def) =>
         double.IsNaN(v) || v <= 0 ? def : v;
+
+    private static double Pct(double v, double def) =>
+        double.IsNaN(v) || v < 0 ? def : v;
 }

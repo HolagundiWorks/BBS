@@ -21,12 +21,14 @@
                         BorderThickness="1"
                         VerticalAlignment="Top">
                     <Image Source="ms-appx:///Assets/logo.png" Stretch="Uniform" Margin="5"
-                           AutomationProperties.Name="BOQ Core logo"/>
+                           AutomationProperties.Name="AQC-Core logo"/>
                 </Border>
                 <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                    <TextBlock Text="BOQ Core" Style="{StaticResource PageTitleStyle}"/>
-                    <TextBlock Text="RCC BBS, civil BOQ, shuttering &amp; PDF drawing takeoff"
+                    <TextBlock Text="AQC-Core" Style="{StaticResource PageTitleStyle}"/>
+                    <TextBlock Text="Accelerated Quantity and Costing Core"
                                Style="{StaticResource PageSubtitleStyle}"/>
+                    <TextBlock Text="RCC BBS, civil BOQ, shuttering, estimate &amp; PDF drawing takeoff"
+                               Style="{StaticResource CaptionSecondaryStyle}"/>
                     <TextBlock Text="Developed by Human Centic Works, Hospet"
                                Style="{StaticResource MetaTextStyle}"
                                Margin="0,6,0,0"/>
@@ -36,6 +38,7 @@
             <StackPanel Spacing="4">
                 <TextBlock Text="Current project" Style="{StaticResource SectionHeaderStyle}"/>
                 <TextBlock x:Name="NameText" Style="{StaticResource BodyStrongStyle}" Margin="0"/>
+                <TextBlock x:Name="MetaText" Style="{StaticResource CaptionSecondaryStyle}" TextWrapping="Wrap"/>
                 <TextBlock x:Name="CountsText" Style="{StaticResource CaptionSecondaryStyle}"/>
             </StackPanel>
 
@@ -43,9 +46,8 @@
                 <TextBlock Text="Latest steel summary" Style="{StaticResource SectionHeaderStyle}"/>
                 <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
                            Text="Generate on an element page or open Purchase orders for full material totals."/>
-                <Border Style="{StaticResource FluentCardStyle}" Padding="8" Margin="0,2,0,0">
-                    <ListView x:Name="SummaryList" SelectionMode="None"
-                              AutomationProperties.Name="Latest steel summary"/>
+                <Border Style="{StaticResource FluentCardStyle}" Padding="4" Margin="0,2,0,0" MinHeight="160">
+                    <Border x:Name="SummaryHost"/>
                 </Border>
             </StackPanel>
 

@@ -44,29 +44,44 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <StackPanel Spacing="4">
+            <Grid RowSpacing="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
                 <TextBlock Text="Concrete" Style="{StaticResource SectionHeaderStyle}"/>
-                <TextBlock x:Name="ConcreteTotal" Style="{StaticResource CaptionSecondaryStyle}"/>
-                <Border Style="{StaticResource FluentCardStyle}" Padding="8" MinHeight="200">
-                    <ListView x:Name="ConcreteList" SelectionMode="None"/>
+                <TextBlock x:Name="ConcreteTotal" Grid.Row="1" Style="{StaticResource CaptionSecondaryStyle}"/>
+                <Border Grid.Row="2" Style="{StaticResource FluentCardStyle}" Padding="4" MinHeight="200">
+                    <Border x:Name="ConcreteHost"/>
                 </Border>
-            </StackPanel>
+            </Grid>
 
-            <StackPanel Grid.Column="1" Spacing="4">
+            <Grid Grid.Column="1" RowSpacing="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
                 <TextBlock Text="Formwork / shuttering" Style="{StaticResource SectionHeaderStyle}"/>
-                <TextBlock x:Name="ShutterTotal" Style="{StaticResource CaptionSecondaryStyle}"/>
-                <Border Style="{StaticResource FluentCardStyle}" Padding="8" MinHeight="200">
-                    <ListView x:Name="ShutterList" SelectionMode="None"/>
+                <TextBlock x:Name="ShutterTotal" Grid.Row="1" Style="{StaticResource CaptionSecondaryStyle}"/>
+                <Border Grid.Row="2" Style="{StaticResource FluentCardStyle}" Padding="4" MinHeight="200">
+                    <Border x:Name="ShutterHost"/>
                 </Border>
-            </StackPanel>
+            </Grid>
 
-            <StackPanel Grid.Column="2" Spacing="4">
+            <Grid Grid.Column="2" RowSpacing="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
                 <TextBlock Text="Steel (last BBS)" Style="{StaticResource SectionHeaderStyle}"/>
-                <TextBlock x:Name="SteelTotal" Style="{StaticResource CaptionSecondaryStyle}"/>
-                <Border Style="{StaticResource FluentCardStyle}" Padding="8" MinHeight="200">
-                    <ListView x:Name="SteelList" SelectionMode="None"/>
+                <TextBlock x:Name="SteelTotal" Grid.Row="1" Style="{StaticResource CaptionSecondaryStyle}"/>
+                <Border Grid.Row="2" Style="{StaticResource FluentCardStyle}" Padding="4" MinHeight="200">
+                    <Border x:Name="SteelHost"/>
                 </Border>
-            </StackPanel>
+            </Grid>
         </Grid>
     </Grid>
 </Page>

@@ -1,5 +1,5 @@
 <!--
-  Fluent 2 tokens — compact density (Cursor-like) for RCC Core.
+  Fluent 2 tokens — compact density (Cursor-like) for AQC-Core.
   Spec: https://fluent2.microsoft.design/
 -->
 <ResourceDictionary
@@ -144,15 +144,18 @@
         <Setter Property="CharacterSpacing" Value="30"/>
     </Style>
 
-    <!-- Ribbon category tabs -->
+    <!-- Ribbon category tabs — active tab merges into command strip below -->
     <Style x:Key="RibbonTabStyle" TargetType="ToggleButton">
-        <Setter Property="MinHeight" Value="32"/>
-        <Setter Property="Padding" Value="12,6,12,6"/>
+        <Setter Property="MinHeight" Value="30"/>
+        <Setter Property="Padding" Value="14,6,14,8"/>
         <Setter Property="FontSize" Value="{StaticResource RibbonTabFontSize}"/>
         <Setter Property="FontWeight" Value="Normal"/>
-        <Setter Property="CornerRadius" Value="{StaticResource RadiusMedium}"/>
-        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="4,4,0,0"/>
+        <Setter Property="BorderThickness" Value="1,1,1,0"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Margin" Value="0,0,2,0"/>
+        <Setter Property="VerticalAlignment" Value="Bottom"/>
     </Style>
 
     <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">

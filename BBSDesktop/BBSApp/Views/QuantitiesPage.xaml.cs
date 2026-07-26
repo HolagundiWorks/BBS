@@ -1,3 +1,4 @@
+using BBSApp.Controls;
 using BBSApp.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -7,10 +8,19 @@ namespace BBSApp.Views;
 public sealed partial class QuantitiesPage : Page
 {
     private readonly List<CheckBox> _levelBoxes = new();
+    private readonly ResultTable _concreteTable = new();
+    private readonly ResultTable _shutterTable = new();
+    private readonly ResultTable _steelTable = new();
 
     public QuantitiesPage()
     {
         InitializeComponent();
+        _concreteTable.SetAutomationName("Concrete quantities");
+        _shutterTable.SetAutomationName("Formwork quantities");
+        _steelTable.SetAutomationName("Steel quantities");
+        ConcreteHost.Child = _concreteTable;
+        ShutterHost.Child = _shutterTable;
+        SteelHost.Child = _steelTable;
         BuildLevelChecks();
         Refresh();
     }
@@ -69,42 +79,51 @@ public sealed partial class QuantitiesPage : Page
         var concrete = MaterialsCalculator.BuildConcreteBoq(store, levels);
         double concSum = concrete.Sum(c => c.VolumeM3);
         ConcreteTotal.Text = $"{concSum:0.###} m³ total";
-        ConcreteList.ItemsSource = concrete
-            .Select(c => $"{c.Mark} · {c.Level} · {c.Element} · {c.Grade} · {c.VolumeM3:0.###} m³")
-            .DefaultIfEmpty("No concrete for selected levels.")
-            .ToList();
+        _concreteTable.SetTable(
+            new[] { "Mark", "Level", "Element", "Grade", "Vol m³" },
+            concrete.Select(c => (IReadOnlyList<string>)new[]
+            {
+                c.Mark, c.Level, c.Element, c.Grade, c.VolumeM3.ToString("0.###")
+            }).ToList());
 
         ShutteringCalculator.SyncStore(store);
         var shutter = ShutteringCalculator.AutoFromRcc(store, levels).ToList();
         double shSum = shutter.Sum(s => s.AreaM2 > 0 ? s.AreaM2 : s.Qty);
         ShutterTotal.Text = $"{shSum:0.###} m² (incl. wastage)";
-        ShutterList.ItemsSource = shutter
-            .Select(s => $"{s.Mark} · {s.Level} · {s.Qty:0.###} m² · {s.Notes}")
-            .DefaultIfEmpty("No formwork for selected levels.")
-            .ToList();
+        _shutterTable.SetTable(
+            new[] { "Mark", "Level", "Qty m²", "Notes" },
+            shutter.Select(s => (IReadOnlyList<string>)new[]
+            {
+                s.Mark, s.Level, s.Qty.ToString("0.###"), s.Notes
+            }).ToList());
 
         if (store.LastSummary?.Rows is { Count: > 0 } steelRows)
         {
             double kg = 0;
-            var lines = new List<string>();
+            var rows = new List<IReadOnlyList<string>>();
+            var headers = store.LastSummary.Headers.Count > 0
+                ? store.LastSummary.Headers.ToArray()
+                : new[] { "Dia (mm)", "Nos", "Length (m)", "Weight (kg)" };
             foreach (var row in steelRows)
             {
-                if (row.Count < 4) continue;
+                if (row.Count == 0) continue;
                 if (string.Equals(row[0], "TOTAL", StringComparison.OrdinalIgnoreCase))
                 {
                     if (double.TryParse(row[^1], out var t)) kg = t;
                     continue;
                 }
-                lines.Add(string.Join(" · ", row));
-                if (double.TryParse(row[3], out var k)) kg += k;
+                rows.Add(row);
+                if (row.Count > 3 && double.TryParse(row[3], out var k)) kg += k;
             }
-            SteelTotal.Text = lines.Count > 0 ? $"~{kg:0.#} kg (from last Generate BBS)" : "Generate BBS on an RCC page first.";
-            SteelList.ItemsSource = lines.Count > 0 ? lines : new List<string> { "Generate BBS on Columns / Beams / … then refresh." };
+            SteelTotal.Text = rows.Count > 0 ? $"~{kg:0.#} kg (from last Generate BBS)" : "Generate BBS on an RCC page first.";
+            _steelTable.SetTable(headers, rows);
         }
         else
         {
             SteelTotal.Text = "Generate BBS on an RCC page first.";
-            SteelList.ItemsSource = new List<string> { "No steel summary yet." };
+            _steelTable.SetTable(
+                new[] { "Note" },
+                new IReadOnlyList<string>[] { new[] { "No steel summary yet — generate BBS on Columns / Beams / …" } });
         }
     }
 }

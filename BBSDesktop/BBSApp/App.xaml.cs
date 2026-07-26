@@ -13,6 +13,7 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        Services.RateBookStore.Current.EnsureLoaded();
         MainWindow = new MainWindow();
         MainWindow.Activate();
     }

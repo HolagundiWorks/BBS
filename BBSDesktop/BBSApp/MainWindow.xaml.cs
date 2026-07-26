@@ -24,7 +24,6 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<string, ToggleButton> _tabButtons = new(StringComparer.OrdinalIgnoreCase);
     private string _activeTab = "project";
     private string _activeTag = "dashboard";
-    private bool _ribbonExpanded;
     private DispatcherTimer? _toastTimer;
     private int _toastGeneration;
 
@@ -39,8 +38,8 @@ public sealed partial class MainWindow : Window
         ProjectStore.Current.SeedDefaults();
         BuildRibbonModel();
         BuildRibbonTabs();
-        SelectTab("project", expand: false);
-        NavigateTo("dashboard", autoCollapse: false);
+        SelectTab("project");
+        NavigateTo("dashboard");
         SetWindowTitle(Branding.WindowTitle(ProjectStore.Current.Name, ProjectStore.Current.IsDirty));
         AppNotify.Raised += OnAppNotify;
         ProjectStore.Current.Changed += OnStoreChanged;
@@ -73,7 +72,7 @@ public sealed partial class MainWindow : Window
             _ => null
         };
         if (tab is null) return;
-        SelectTab(tab, expand: true);
+        SelectTab(tab);
         e.Handled = true;
     }
 
@@ -115,13 +114,19 @@ public sealed partial class MainWindow : Window
             Cmd("skirting", "Skirting", NavIcon("skirting")),
             Cmd("parapet", "Parapet", NavIcon("parapet")),
             Cmd("plinth_protection", "Plinth protection", NavIcon("plinth_protection")),
+            Cmd("doors", "Doors", NavIcon("doors")),
+            Cmd("windows", "Windows", NavIcon("windows")),
         }));
         _tabs.Add(new RibbonTab("outputs", "Outputs", new[]
         {
             Cmd("quantities", "Quantities", Glyph("\uE9D2")),
             Cmd("po", "Purchase orders", Glyph("\uE7BF")),
+            Cmd("estimate", "Estimate", Glyph("\uE8EF")),
+            Cmd("ratebook", "Rate book", Glyph("\uE8F1")),
             Cmd("report", "Report", Glyph("\uE8A5")),
-            Cmd("settings", "Settings", Glyph("\uE713")),
+            Cmd("settings_project", "Project", Glyph("\uE8B7")),
+            Cmd("settings_engineering", "Engineering", Glyph("\uE90F")),
+            Cmd("settings_cost", "Cost %", Glyph("\uE8EF")),
         }));
     }
 
@@ -156,6 +161,8 @@ public sealed partial class MainWindow : Window
             "skirting" => "NavIconSkirting",
             "parapet" => "NavIconParapet",
             "plinth_protection" or "plinth" => "NavIconPlinth",
+            "doors" or "door" => null,
+            "windows" or "window" => null,
             _ => null
         };
         if (key is not null && ThemeIcon(key) is { } img)
@@ -189,6 +196,10 @@ public sealed partial class MainWindow : Window
         "skirting" => "SK",
         "parapet" => "PR",
         "plinth_protection" or "plinth" => "PP",
+        "doors" or "door" => "DR",
+        "windows" or "window" => "WN",
+        "estimate" => "ES",
+        "ratebook" => "RB",
         _ => tag.Length >= 2 ? tag[..2].ToUpperInvariant() : tag.ToUpperInvariant()
     };
 
@@ -248,12 +259,16 @@ public sealed partial class MainWindow : Window
     private void RibbonTab_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.Tag is not string id) return;
-        SelectTab(id, expand: true);
+        SelectTab(id);
     }
 
-    private void SelectTab(string id, bool expand)
+    private void SelectTab(string id)
     {
         _activeTab = id;
+        var tabFill = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"];
+        var tabStroke = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"];
+        var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+
         foreach (var kv in _tabButtons)
         {
             bool on = string.Equals(kv.Key, id, StringComparison.OrdinalIgnoreCase);
@@ -261,6 +276,11 @@ public sealed partial class MainWindow : Window
             kv.Value.FontWeight = on
                 ? Microsoft.UI.Text.FontWeights.SemiBold
                 : Microsoft.UI.Text.FontWeights.Normal;
+            // Active tab shares fill/border with RibbonBody so they read as one piece.
+            kv.Value.Background = on ? tabFill : transparent;
+            kv.Value.BorderBrush = on ? tabStroke : transparent;
+            kv.Value.Foreground = (Brush)Application.Current.Resources[
+                on ? "TextFillColorPrimaryBrush" : "TextFillColorSecondaryBrush"];
         }
 
         var tab = _tabs.FirstOrDefault(t => t.Id == id) ?? _tabs[0];
@@ -298,16 +318,17 @@ public sealed partial class MainWindow : Window
                 MinWidth = 76,
                 Background = active
                     ? (Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"]
-                    : new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                BorderThickness = new Thickness(0),
+                    : transparent,
+                BorderBrush = active
+                    ? (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"]
+                    : transparent,
+                BorderThickness = active ? new Thickness(0, 0, 0, 2) : new Thickness(0),
                 CornerRadius = new CornerRadius(4)
             };
             ToolTipService.SetToolTip(btn, cmd.Label);
             btn.Click += RibbonCommand_Click;
             RibbonCommandPanel.Children.Add(btn);
         }
-
-        SetRibbonExpanded(expand);
     }
 
     private static FontIcon CloneFontIcon(FontIcon src, double size = 16) => new()
@@ -345,22 +366,16 @@ public sealed partial class MainWindow : Window
     private void RibbonCommand_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.Tag is not string tag) return;
-        NavigateTo(tag, autoCollapse: true);
+        NavigateTo(tag);
     }
 
-    private void SetRibbonExpanded(bool expanded)
-    {
-        _ribbonExpanded = expanded;
-        RibbonBody.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void NavigateTo(string tag, bool autoCollapse)
+    private void NavigateTo(string tag)
     {
         _activeTag = tag;
-        // Keep matching tab selected for context.
+        // Keep matching tab selected for context; ribbon stays expanded.
         var owner = _tabs.FirstOrDefault(t => t.Commands.Any(c => c.Tag == tag));
         if (owner is not null && owner.Id != _activeTab)
-            SelectTab(owner.Id, expand: !autoCollapse && _ribbonExpanded);
+            SelectTab(owner.Id);
         else
             RefreshCommandHighlight();
 
@@ -378,7 +393,7 @@ public sealed partial class MainWindow : Window
             "stairs" => new ElementPage(ElementSpecs.Stairs(), ProjectStore.Current.Stairs),
             "takeoff" => new TakeoffPage(),
             "masonry" => new ElementPage(ElementSpecs.MasonryWalls(), ProjectStore.Current.MasonryWalls),
-            "plaster" => new ElementPage(ElementSpecs.Plaster(), ProjectStore.Current.Plaster),
+            "plaster" => new ElementPage(ElementSpecs.Plaster(), ProjectStore.Current.FinishPropose),
             "pcc" => new ElementPage(ElementSpecs.PccBeds(), ProjectStore.Current.PccBeds),
             "earthwork" => new ElementPage(ElementSpecs.Earthwork(), ProjectStore.Current.Earthwork),
             "ssm" => new ElementPage(ElementSpecs.SizeStone(), ProjectStore.Current.SizeStone),
@@ -393,28 +408,36 @@ public sealed partial class MainWindow : Window
             "skirting" => new ElementPage(ElementSpecs.Skirting(), ProjectStore.Current.Skirting),
             "parapet" => new ElementPage(ElementSpecs.Parapet(), ProjectStore.Current.Parapet),
             "plinth_protection" => new ElementPage(ElementSpecs.PlinthProtection(), ProjectStore.Current.PlinthProtection),
+            "doors" => new ElementPage(ElementSpecs.Doors(), ProjectStore.Current.Doors),
+            "windows" => new ElementPage(ElementSpecs.Windows(), ProjectStore.Current.Windows),
             "quantities" => new QuantitiesPage(),
             "po" => new PurchaseOrderPage(),
+            "estimate" => new EstimatePage(),
+            "ratebook" => new RateBookPage(),
             "report" => new ReportPage(),
-            "settings" => new SettingsPage(),
+            "settings" or "settings_project" => new SettingsPage(SettingsPage.SettingsTab.Project),
+            "settings_engineering" => new SettingsPage(SettingsPage.SettingsTab.Engineering),
+            "settings_cost" => new SettingsPage(SettingsPage.SettingsTab.CostPercent),
             _ => new DashboardPage()
         };
 
         var label = owner?.Commands.FirstOrDefault(c => c.Tag == tag)?.Label ?? tag;
         RibbonPageLabel.Text = label;
-
-        if (autoCollapse)
-            SetRibbonExpanded(false);
     }
 
     private void RefreshCommandHighlight()
     {
+        var accent = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
+        var selectedBg = (Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"];
+        var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+
         foreach (var child in RibbonCommandPanel.Children)
         {
             if (child is not Button btn || btn.Tag is not string tag) continue;
-            btn.Background = string.Equals(tag, _activeTag, StringComparison.OrdinalIgnoreCase)
-                ? (Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"]
-                : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            bool on = string.Equals(tag, _activeTag, StringComparison.OrdinalIgnoreCase);
+            btn.Background = on ? selectedBg : transparent;
+            btn.BorderBrush = on ? accent : transparent;
+            btn.BorderThickness = on ? new Thickness(0, 0, 0, 2) : new Thickness(0);
         }
     }
 
@@ -552,7 +575,7 @@ public sealed partial class MainWindow : Window
 
     private void SelectNavTag(string tag)
     {
-        NavigateTo(tag, autoCollapse: true);
+        NavigateTo(tag);
     }
 
     private void SetWindowTitle(string text)
@@ -595,6 +618,13 @@ public sealed partial class MainWindow : Window
         });
         body.Children.Add(new TextBlock
         {
+            Text = Branding.FullName,
+            Style = (Style)Application.Current.Resources["BodyStrongStyle"],
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center
+        });
+        body.Children.Add(new TextBlock
+        {
             Text = Branding.Tagline,
             Style = (Style)Application.Current.Resources["CaptionSecondaryStyle"],
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -610,6 +640,12 @@ public sealed partial class MainWindow : Window
         body.Children.Add(new TextBlock
         {
             Text = Branding.Copyright,
+            Style = (Style)Application.Current.Resources["MetaTextStyle"],
+            HorizontalAlignment = HorizontalAlignment.Center
+        });
+        body.Children.Add(new TextBlock
+        {
+            Text = $"Licensed under {Branding.LicenseName}",
             Style = (Style)Application.Current.Resources["MetaTextStyle"],
             HorizontalAlignment = HorizontalAlignment.Center
         });
@@ -675,7 +711,7 @@ public sealed partial class MainWindow : Window
         var picker = new FileSavePicker();
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
         picker.SuggestedFileName = ProjectStore.Current.Name.Replace(' ', '_');
-        picker.FileTypeChoices.Add("BOQ Core Project", new List<string> { ".bbsproj" });
+        picker.FileTypeChoices.Add("AQC-Core Project", new List<string> { ".bbsproj" });
         var file = await picker.PickSaveFileAsync();
         if (file is null) return;
         if (!EngineClient.SaveProject(file.Path, ProjectStore.Current.ToJson(), out var err))

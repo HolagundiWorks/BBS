@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Publish BOQ Core (self-contained win-x64) and build Setup.exe with Inno Setup 6.
+  Publish AQC-Core (self-contained win-x64, unpackaged) and build Setup.exe with Inno Setup 6.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File BBSDesktop\installer\build-installer.ps1
@@ -20,17 +20,16 @@ $ErrorActionPreference = "Stop"
 
 $InstallerDir = $PSScriptRoot
 $DesktopDir = Split-Path $InstallerDir -Parent
-$RepoRoot = Split-Path $DesktopDir -Parent
 $AppProj = Join-Path $DesktopDir "BBSApp\BBSApp.csproj"
 $EngineDll = Join-Path $DesktopDir "build\bbs_engine.dll"
 $PublishDir = Join-Path $DesktopDir "artifacts\publish"
 $InstallerOutDir = Join-Path $DesktopDir "artifacts\installer"
-$IssPath = Join-Path $InstallerDir "BOQCore.iss"
+$IssPath = Join-Path $InstallerDir "AQCCore.iss"
+$LicensePath = Join-Path (Split-Path $DesktopDir -Parent) "LICENSE"
 
 function Get-AppVersionFromCsproj {
     param([string] $Csproj)
     [xml] $xml = Get-Content -LiteralPath $Csproj -Raw
-    $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
     $ver = $xml.SelectSingleNode("//Version")
     if ($ver -and $ver.InnerText.Trim()) { return $ver.InnerText.Trim() }
     return "1.0.0"
@@ -55,34 +54,48 @@ if (-not $AppVersion) {
     $AppVersion = Get-AppVersionFromCsproj -Csproj $AppProj
 }
 
-Write-Host "=== BOQ Core installer ===" -ForegroundColor Cyan
+Write-Host "=== AQC-Core Setup.exe installer ===" -ForegroundColor Cyan
 Write-Host "Version : $AppVersion"
 Write-Host "Publish : $PublishDir"
 Write-Host ""
+
+if (-not (Test-Path -LiteralPath $LicensePath)) {
+    throw "LICENSE file missing at $LicensePath"
+}
 
 # --- Engine DLL ---
 if (-not (Test-Path -LiteralPath $EngineDll)) {
     if ($SkipEngineBuild) {
         throw "bbs_engine.dll not found at '$EngineDll'. Build the engine or omit -SkipEngineBuild."
     }
+    $cmake = $null
+    foreach ($c in @(
+            "cmake",
+            "${env:ProgramFiles}\CMake\bin\cmake.exe",
+            "${env:ProgramFiles(x86)}\CMake\bin\cmake.exe",
+            "${env:LOCALAPPDATA}\Programs\CMake\bin\cmake.exe"
+        )) {
+        if ($c -eq "cmake") {
+            $cmd = Get-Command cmake -ErrorAction SilentlyContinue
+            if ($cmd) { $cmake = $cmd.Source; break }
+        } elseif (Test-Path -LiteralPath $c) { $cmake = $c; break }
+    }
+    if (-not $cmake) { throw "cmake not found and bbs_engine.dll missing." }
     Write-Host "Building bbs_engine.dll..." -ForegroundColor Yellow
     $buildDir = Join-Path $DesktopDir "build"
     if (-not (Test-Path -LiteralPath (Join-Path $buildDir "CMakeCache.txt"))) {
-        & cmake -S $DesktopDir -B $buildDir -G Ninja
+        & $cmake -S $DesktopDir -B $buildDir -G Ninja
         if ($LASTEXITCODE -ne 0) { throw "cmake configure failed ($LASTEXITCODE)" }
     }
-    & cmake --build $buildDir --config Release --target bbs_engine
+    & $cmake --build $buildDir --config Release --target bbs_engine
     if ($LASTEXITCODE -ne 0) { throw "cmake build bbs_engine failed ($LASTEXITCODE)" }
-    if (-not (Test-Path -LiteralPath $EngineDll)) {
-        throw "bbs_engine.dll still missing after build: $EngineDll"
-    }
 } else {
     Write-Host "Engine  : $EngineDll (ok)"
 }
 
-# --- Publish ---
+# --- Publish unpackaged (override MSIX for classic installer payload) ---
 if (-not $SkipPublish) {
-    Write-Host "Publishing self-contained win-x64..." -ForegroundColor Yellow
+    Write-Host "Publishing self-contained win-x64 (unpackaged)..." -ForegroundColor Yellow
     if (Test-Path -LiteralPath $PublishDir) {
         Remove-Item -LiteralPath $PublishDir -Recurse -Force
     }
@@ -93,25 +106,27 @@ if (-not $SkipPublish) {
         -r win-x64 `
         --self-contained true `
         -p:Platform=x64 `
+        -p:WindowsPackageType=None `
         -p:PublishSingleFile=false `
+        -p:GenerateAppxPackageOnBuild=false `
+        -p:AppxPackageSigningEnabled=false `
         -o $PublishDir
 
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 }
 
-$exe = Join-Path $PublishDir "BOQCore.exe"
+$exe = Join-Path $PublishDir "AQCCore.exe"
 if (-not (Test-Path -LiteralPath $exe)) {
-    throw "Publish output missing BOQCore.exe at $PublishDir"
+    throw "Publish output missing AQCCore.exe at $PublishDir"
 }
 
-# Ensure native engine is next to the exe (Publish target may miss it)
 $pubEngine = Join-Path $PublishDir "bbs_engine.dll"
 if (-not (Test-Path -LiteralPath $pubEngine)) {
     Write-Host "Copying bbs_engine.dll into publish folder..." -ForegroundColor Yellow
     Copy-Item -LiteralPath $EngineDll -Destination $pubEngine -Force
 }
 
-Write-Host "Publish : BOQCore.exe + bbs_engine.dll ready"
+Write-Host "Publish : AQCCore.exe + bbs_engine.dll ready"
 
 # --- Inno Setup ---
 $iscc = Find-ISCC
@@ -119,7 +134,6 @@ if (-not $iscc) {
     throw @"
 Inno Setup 6 not found (ISCC.exe).
 Install from https://jrsoftware.org/isdl.php then re-run this script.
-Or add ISCC to PATH.
 "@
 }
 
@@ -129,7 +143,7 @@ New-Item -ItemType Directory -Path $InstallerOutDir -Force | Out-Null
 & $iscc "/DAppVersion=$AppVersion" $IssPath
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
 
-$setup = Join-Path $InstallerOutDir "BOQCore-Setup-$AppVersion.exe"
+$setup = Join-Path $InstallerOutDir "AQCCore-Setup-$AppVersion.exe"
 if (-not (Test-Path -LiteralPath $setup)) {
     throw "Expected installer not found: $setup"
 }
@@ -137,4 +151,6 @@ if (-not (Test-Path -LiteralPath $setup)) {
 Write-Host ""
 Write-Host "Installer ready:" -ForegroundColor Green
 Write-Host "  $setup"
+Write-Host "  Installs to %LocalAppData%\Programs\AQC-Core\"
 Write-Host ""
+Get-Item $setup | Format-List FullName, Length, LastWriteTime

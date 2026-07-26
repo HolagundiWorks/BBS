@@ -2,7 +2,7 @@
     x:Class="BBSApp.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="BOQ Core">
+    Title="AQC-Core">
 
     <Grid Background="Transparent">
         <Grid.RowDefinitions>
@@ -29,11 +29,11 @@
                     <Image Source="ms-appx:///Assets/logo.png"
                            Stretch="Uniform"
                            Margin="2"
-                           AutomationProperties.Name="BOQ Core logo"/>
+                           AutomationProperties.Name="AQC-Core logo"/>
                 </Border>
                 <StackPanel VerticalAlignment="Center" Spacing="0">
                     <TextBlock x:Name="TitleBarText"
-                               Text="BOQ Core"
+                               Text="AQC-Core"
                                FontSize="12"
                                FontWeight="SemiBold"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
@@ -54,6 +54,10 @@
                 <MenuFlyoutSeparator/>
                 <MenuFlyoutItem Text="Save" Click="Save_Click" AccessKey="S"/>
                 <MenuFlyoutItem Text="Save as…" Click="SaveAs_Click"/>
+                <MenuFlyoutSeparator/>
+                <MenuFlyoutItem Text="Project settings…" Click="NavMenu_Click" Tag="settings_project"/>
+                <MenuFlyoutItem Text="Engineering settings…" Click="NavMenu_Click" Tag="settings_engineering"/>
+                <MenuFlyoutItem Text="Cost percentages…" Click="NavMenu_Click" Tag="settings_cost"/>
                 <MenuFlyoutSeparator/>
                 <MenuFlyoutItem Text="Exit" Click="Exit_Click" AccessKey="X"/>
             </MenuBarItem>
@@ -76,30 +80,33 @@
                 <MenuFlyoutItem Text="Shuttering" Click="NavMenu_Click" Tag="shuttering"/>
                 <MenuFlyoutItem Text="Flooring" Click="NavMenu_Click" Tag="flooring"/>
                 <MenuFlyoutItem Text="Painting" Click="NavMenu_Click" Tag="painting"/>
+                <MenuFlyoutItem Text="Doors" Click="NavMenu_Click" Tag="doors"/>
+                <MenuFlyoutItem Text="Windows" Click="NavMenu_Click" Tag="windows"/>
                 <MenuFlyoutSeparator/>
                 <MenuFlyoutItem Text="Purchase orders" Click="NavMenu_Click" Tag="po"/>
+                <MenuFlyoutItem Text="Estimate" Click="NavMenu_Click" Tag="estimate"/>
+                <MenuFlyoutItem Text="Rate book" Click="NavMenu_Click" Tag="ratebook"/>
                 <MenuFlyoutItem Text="Quantities preview" Click="NavMenu_Click" Tag="quantities"/>
                 <MenuFlyoutItem Text="Report" Click="NavMenu_Click" Tag="report"/>
-                <MenuFlyoutItem Text="Settings" Click="NavMenu_Click" Tag="settings"/>
             </MenuBarItem>
             <MenuBarItem Title="Help" AccessKey="H">
-                <MenuFlyoutItem Text="About BOQ Core" Click="About_Click"/>
+                <MenuFlyoutItem Text="About AQC-Core" Click="About_Click"/>
             </MenuBarItem>
         </MenuBar>
 
-        <!-- Ribbon-style top navigation (auto-collapses after pick) -->
+        <!-- Ribbon — tabs stay fixed; command strip always visible and merged with active tab -->
         <Border x:Name="RibbonChrome" Grid.Row="2"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="0,0,0,1"
-                Padding="8,4,12,4">
-            <Grid RowSpacing="4">
+                Padding="8,6,12,8">
+            <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <Grid>
+                <Grid Margin="0,0,0,-1" Canvas.ZIndex="1">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -108,20 +115,20 @@
                     <ScrollViewer HorizontalScrollMode="Enabled"
                                   HorizontalScrollBarVisibility="Auto"
                                   VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
-                        <StackPanel x:Name="RibbonTabPanel" Orientation="Horizontal" Spacing="2"/>
+                        <StackPanel x:Name="RibbonTabPanel" Orientation="Horizontal" Spacing="0"/>
                     </ScrollViewer>
 
                     <TextBlock x:Name="RibbonPageLabel" Grid.Column="1"
                                VerticalAlignment="Center" Margin="12,0,0,0"
-                               Style="{StaticResource BodyStrongStyle}"/>
+                               Style="{StaticResource CaptionSecondaryStyle}"/>
                 </Grid>
 
-                <Border x:Name="RibbonBody" Grid.Row="1" Visibility="Collapsed"
+                <Border x:Name="RibbonBody" Grid.Row="1"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1"
-                        CornerRadius="{StaticResource RadiusLarge}"
-                        Padding="8,6" Margin="0,2,0,0">
+                        CornerRadius="0,4,4,4"
+                        Padding="6,8,6,6">
                     <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto"
                                   VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="RibbonCommandPanel" Orientation="Horizontal" Spacing="2"/>

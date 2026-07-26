@@ -11,6 +11,16 @@ BBSDesktop/artifacts/
 **/.ninja_log
 **/build.ninja
 
+# MSIX local signing keys (generate via installer/build-msix.ps1)
+*.pfx
+*.p12
+BBSDesktop/BBSApp/AQCCore_TemporaryKey.pfx
+
+# Local / editor clutter
+.claude/
+.cursor/
+*.log
+
 # Compiled / local junk
 __pycache__/
 *.pyc
@@ -27,3 +37,5 @@ __pycache__/
 *.user
 .vs/
 *.suo
+Thumbs.db
+Desktop.ini

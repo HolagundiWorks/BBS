@@ -49,12 +49,17 @@ public sealed partial class ElementPage : Page
     private readonly ResultTable _bbsTable = new();
     private readonly ResultTable _summaryTable = new();
     private readonly ResultTable _checksTable = new();
+    private readonly ResultTable _finalTable = new();
     private int _editIndex = -1; // -1 = new record
     private bool _sheetEditBusy;
     private bool _suppressRecordCombo;
     private bool _sheetComboFillBusy;
     private string[] _sheetColumns = Array.Empty<string>();
+    private string[] _deductSheetColumns = Array.Empty<string>();
     private Dictionary<string, FieldDef> _sheetFieldByKey = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, FieldDef> _deductFieldByKey = new(StringComparer.OrdinalIgnoreCase);
+    private int _deductEditRow = -1;
+    private ObservableCollection<Dictionary<string, string>>? _openingRows;
     private const double SheetColMinWidth = 112;
     private const double SheetComboColWidth = 128;
 
@@ -81,6 +86,14 @@ public sealed partial class ElementPage : Page
 
     private const int FormColumns = 3;
 
+    /// <summary>RCC always; civil doors/windows/masonry/pcc/etc. for dimension sketches.</summary>
+    private bool ShowsSketch =>
+        !_spec.IsCivilBoq
+        || _spec.Kind is "doors" or "windows" or "masonry" or "plaster" or "painting"
+            or "pcc" or "flooring" or "earthwork" or "ssm" or "shuttering"
+            or "dpc" or "coping" or "screed" or "vdf" or "skirting" or "parapet"
+            or "plinth_protection" or "waterproofing";
+
     public ElementPage(ElementSpec spec, ObservableCollection<Dictionary<string, string>> rows)
     {
         _spec = spec;
@@ -92,7 +105,9 @@ public sealed partial class ElementPage : Page
         {
             SubtitleText.Text = spec.IsComputedFromRcc
                 ? spec.Subtitle + " · Sheet from RCC — set Include, Refresh as needed."
-                : spec.Subtitle + " · Excel sheet — edit cells, then Extract quantities.";
+                : spec.IsFinishReconcile
+                    ? spec.Subtitle + " · Reconcile exposure, then Finalize finishes."
+                    : spec.Subtitle + " · Excel sheet — edit cells, then Extract quantities.";
             GenerateBtn.Content = "Extract quantities";
             _bbsTable.SetAutomationName("Quantity take-off");
             _summaryTable.SetAutomationName("Quantity summary");
@@ -108,14 +123,41 @@ public sealed partial class ElementPage : Page
         BbsHost.Child = _bbsTable;
         SummaryHost.Child = _summaryTable;
         ChecksHost.Child = _checksTable;
-        Diagram.SetKind(spec.Kind);
-        Diagram.Update(BuildDiagramSnapshot(), DiagramPart.None);
+        if (FinalTableHost is not null)
+        {
+            _finalTable.SetAutomationName("Finalized finishes");
+            FinalTableHost.Child = _finalTable;
+        }
+        if (ShowsSketch)
+        {
+            SketchPanel.Visibility = Visibility.Visible;
+            Grid.SetColumnSpan(SheetBorder, 1);
+            Diagram.SetKind(spec.Kind);
+            Diagram.Update(BuildDiagramSnapshot(), DiagramPart.None);
+        }
+        else
+        {
+            SketchPanel.Visibility = Visibility.Collapsed;
+            Grid.SetColumnSpan(SheetBorder, 2);
+        }
         BuildForm();
         InitFloorCombo();
         BuildSheetHeader();
+        if (spec.Kind == "masonry")
+        {
+            DeductionsPivotItem.Visibility = Visibility.Visible;
+            _openingRows = ProjectStore.Current.MasonryOpenings;
+            BuildDeductSheetHeader();
+        }
         if (spec.IsComputedFromRcc)
             ApplyComputedFromRccMode();
+        if (spec.IsFinishReconcile)
+            ApplyFinishReconcileMode();
+        if (spec.Kind == "painting")
+            FinishSurfacesCalculator.SyncPaintingFromPlaster(ProjectStore.Current);
         RefreshSheet();
+        if (spec.Kind == "masonry")
+            RefreshDeductSheet();
         if (_rows.Count > 0)
         {
             var visible = FilteredStoreIndices().ToList();
@@ -124,20 +166,40 @@ public sealed partial class ElementPage : Page
                 _sheetEditRow = visible[0];
                 LoadRecord(visible[0]);
                 RefreshSheet();
+                if (spec.Kind == "masonry") RefreshDeductSheet();
                 FocusSheetCell(0, 0);
             }
-            else if (!_spec.IsComputedFromRcc)
+            else if (!_spec.IsComputedFromRcc && !_spec.IsFinishReconcile)
                 AddSheetRow();
             else
                 NewRecord();
         }
-        else if (!_spec.IsComputedFromRcc)
+        else if (!_spec.IsComputedFromRcc && !_spec.IsFinishReconcile)
             AddSheetRow();
         else
             NewRecord();
         rows.CollectionChanged += _rowsChanged;
         ProjectStore.Current.Changed += OnStoreChanged;
         Unloaded += OnUnloaded;
+    }
+
+    private void ApplyFinishReconcileMode()
+    {
+        FinishSurfacesCalculator.SyncPropose(ProjectStore.Current);
+        NewBtn.Visibility = Visibility.Collapsed;
+        DeleteBtn.Visibility = Visibility.Collapsed;
+        UndoBtn.Visibility = Visibility.Collapsed;
+        RefreshComputedBtn.Visibility = Visibility.Visible;
+        RefreshComputedBtn.Content = "Refresh from walls & RCC";
+        FinalizeFinishBtn.Visibility = Visibility.Visible;
+        SaveBtn.Visibility = Visibility.Collapsed;
+        EditHint.Visibility = Visibility.Collapsed;
+        ComputedHint.Visibility = Visibility.Visible;
+        ComputedHint.Text = "Edit Include / sides exposed / ceiling · Refresh rebuilds · Finalize → Plaster + Paint";
+        EntryPivotItem.Header = "Reconcile";
+        FinalPivotItem.Visibility = Visibility.Visible;
+        SheetTitleText.Text = "Reconcile";
+        FloorCombo.Visibility = Visibility.Collapsed;
     }
 
     private void ApplyComputedFromRccMode()
@@ -154,6 +216,17 @@ public sealed partial class ElementPage : Page
 
     private void RefreshComputed_Click(object sender, RoutedEventArgs e)
     {
+        if (_spec.IsFinishReconcile)
+        {
+            FinishSurfacesCalculator.SyncPropose(ProjectStore.Current);
+            RefreshSheet();
+            RefreshFinalList();
+            if (_rows.Count > 0) LoadRecord(0);
+            else NewRecord();
+            AppNotify.Success("Finishes refreshed", $"{_rows.Count} proposed surface(s) from walls & RCC.");
+            ProjectStore.Current.Notify();
+            return;
+        }
         if (!_spec.IsComputedFromRcc) return;
         ShutteringCalculator.SyncStore(ProjectStore.Current);
         RefreshSheet();
@@ -162,6 +235,65 @@ public sealed partial class ElementPage : Page
         AppNotify.Success("Shuttering refreshed", $"{_rows.Count} member(s) from RCC concrete.");
         ProjectStore.Current.Notify();
     }
+
+    private void FinalizeFinish_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_spec.IsFinishReconcile) return;
+        FinishSurfacesCalculator.Finalize(ProjectStore.Current);
+        RefreshFinalList();
+        int n = ProjectStore.Current.Plaster.Count(r =>
+            r.TryGetValue("source", out var s) && s.StartsWith("auto_", StringComparison.OrdinalIgnoreCase));
+        AppNotify.Success("Finishes finalized",
+            $"{n} plaster line(s); painting qty taken from plaster. Use Extract quantities on Results.");
+        MainPivot.SelectedItem = FinalPivotItem;
+    }
+
+    private void MainPivot_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ReferenceEquals(MainPivot.SelectedItem, FinalPivotItem))
+            RefreshFinalList();
+    }
+
+    private void RefreshFinalList()
+    {
+        if (FinalTableHost is null) return;
+        var store = ProjectStore.Current;
+        FinishSurfacesCalculator.SyncPaintingFromPlaster(store);
+        double plasterSum = 0, paintSum = 0;
+        var rows = new List<IReadOnlyList<string>>();
+        foreach (var r in store.Plaster)
+        {
+            double a = 0;
+            if (r.TryGetValue("area_m2", out var am))
+                double.TryParse(am, NumberStyles.Float, CultureInfo.InvariantCulture, out a);
+            plasterSum += a;
+            rows.Add(new[]
+            {
+                "Plaster", Get(r, "mark"), Get(r, "level"), a.ToString("0.###", CultureInfo.InvariantCulture),
+                Get(r, "source_mark"), Get(r, "notes")
+            });
+        }
+        foreach (var r in store.Painting)
+        {
+            double a = 0;
+            if (r.TryGetValue("area_m2", out var am))
+                double.TryParse(am, NumberStyles.Float, CultureInfo.InvariantCulture, out a);
+            paintSum += a;
+            rows.Add(new[]
+            {
+                "Painting", Get(r, "mark"), Get(r, "level"), a.ToString("0.###", CultureInfo.InvariantCulture),
+                Get(r, "source_mark"), Get(r, "notes")
+            });
+        }
+        _finalTable.SetTable(
+            new[] { "Kind", "Mark", "Level", "Area m²", "Source", "Notes" },
+            rows);
+        FinalSummaryText.Text =
+            $"Proposed {store.FinishPropose.Count} · Plaster {plasterSum:0.###} m² · paint {paintSum:0.###} m² (paint from plaster).";
+    }
+
+    private static string Get(Dictionary<string, string> r, string key) =>
+        r.TryGetValue(key, out var v) ? v : "";
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
@@ -289,6 +421,14 @@ public sealed partial class ElementPage : Page
                 PlaceholderText = "Select"
             };
             if (f.Key == "level") FillLevelCombo(cb, f.Default);
+            else if (f.Key.Equals("wall_mark", StringComparison.OrdinalIgnoreCase))
+            {
+                cb.Items.Add("");
+                foreach (var m in WallMarkOptions())
+                    if (!string.IsNullOrWhiteSpace(m)) cb.Items.Add(m);
+                string prefer = f.Default ?? "";
+                cb.SelectedItem = cb.Items.Contains(prefer) ? prefer : (cb.Items.Count > 0 ? cb.Items[0] : null);
+            }
             else
             {
                 var opts = f.Options ?? Array.Empty<string>();
@@ -487,8 +627,11 @@ public sealed partial class ElementPage : Page
         Diagram.Update(BuildDiagramSnapshot(), DiagramPart.Extra, "Additional bars");
     }
 
-    private void RefreshDiagram() =>
+    private void RefreshDiagram()
+    {
+        if (!ShowsSketch) return;
         Diagram.Update(BuildDiagramSnapshot(), _diagramPart);
+    }
 
     private DiagramSnapshot BuildDiagramSnapshot()
     {
@@ -628,6 +771,28 @@ public sealed partial class ElementPage : Page
                 B = Num("breadth"),
                 Height = Num("height"),
                 D = Num("height")
+            },
+            "doors" or "windows" => new DiagramSnapshot
+            {
+                L = Num("width"),
+                B = Num("width"),
+                Height = Num("height"),
+                D = Num("width")
+            },
+            "flooring" or "painting" or "waterproofing" or "shuttering" or "dpc"
+                or "screed" or "vdf" or "skirting" or "plinth_protection" => new DiagramSnapshot
+            {
+                L = Num("length") > 0 ? Num("length") : Num("width"),
+                Height = Num("height") > 0 ? Num("height") : Num("breadth"),
+                B = Num("breadth") > 0 ? Num("breadth") : Num("thickness"),
+                D = Num("thickness") > 0 ? Num("thickness") : Num("depth")
+            },
+            "coping" or "parapet" => new DiagramSnapshot
+            {
+                L = Num("length"),
+                B = Num("width") > 0 ? Num("width") : Num("breadth"),
+                Height = Num("height") > 0 ? Num("height") : Num("depth"),
+                D = Num("depth") > 0 ? Num("depth") : Num("thickness")
             },
             _ => BuildBeamSnap(Num, ApproxLd, MaxDiaFromBars)
         };
@@ -1221,6 +1386,11 @@ public sealed partial class ElementPage : Page
             AppNotify.Warning("Shuttering is automatic", "Delete the source concrete member instead.");
             return;
         }
+        if (_spec.IsFinishReconcile)
+        {
+            AppNotify.Warning("Finishes are proposed", "Set Include to No, or Refresh after changing walls/RCC.");
+            return;
+        }
         if (_editIndex < 0 || _editIndex >= _rows.Count)
         {
             ShowError("Select a datasheet row to delete.");
@@ -1311,7 +1481,7 @@ public sealed partial class ElementPage : Page
 
     private IEnumerable<int> FilteredStoreIndices()
     {
-        if (!MemberSheetHelper.UsesFloorScope(_spec.Kind) || _spec.IsComputedFromRcc)
+        if (!MemberSheetHelper.UsesFloorScope(_spec.Kind) || _spec.IsComputedFromRcc || _spec.IsFinishReconcile)
         {
             for (int i = 0; i < _rows.Count; i++) yield return i;
             yield break;
@@ -1329,37 +1499,38 @@ public sealed partial class ElementPage : Page
 
     private void BuildSheetHeader()
     {
-        var keys = new List<string>();
-        _sheetFieldByKey.Clear();
-        foreach (var f in _spec.Fields)
-        {
-            if (f.Kind == FieldKind.Section) continue;
-            if (MemberSheetHelper.IsSheetHiddenKey(_spec.Kind, f.Key)) continue;
-            if (keys.Contains(f.Key, StringComparer.OrdinalIgnoreCase)) continue;
-            keys.Add(f.Key);
-            _sheetFieldByKey[f.Key] = f;
-        }
-        if (keys.Count == 0)
-            keys.AddRange(_spec.InputKeys.Length > 0 ? _spec.InputKeys : new[] { "mark" });
+        BuildSheetHeaderCore(
+            tab: "entry",
+            header: SheetHeader,
+            out _sheetColumns,
+            out _sheetFieldByKey,
+            includeMarkAlways: false);
+    }
 
-        _sheetColumns = keys.ToArray();
-        SheetHeader.Children.Clear();
-        SheetHeader.ColumnDefinitions.Clear();
-        SheetHeader.Background = SheetHeaderBg;
-        SheetHeader.Padding = new Thickness(0);
-        double totalW = 0;
-        for (int i = 0; i < _sheetColumns.Length; i++)
+    private void BuildDeductSheetHeader()
+    {
+        // Opening lines: wall (repeatable) + kind + one opening type + Nos
+        _deductSheetColumns = new[] { "wall_mark", "opening_kind", "nos", "opening_l", "opening_h" };
+        _deductFieldByKey = new Dictionary<string, FieldDef>(StringComparer.OrdinalIgnoreCase)
         {
-            double w = SheetColumnWidth(_sheetColumns[i]);
+            ["wall_mark"] = ElementSpecs.Combo("wall_mark", "Wall mark", WallMarkOptions(), ""),
+            ["opening_kind"] = ElementSpecs.Combo("opening_kind", "Kind", new[] { "Door", "Window", "Other" }, "Other"),
+            ["nos"] = ElementSpecs.Text("nos", "Nos", "1"),
+            ["opening_l"] = ElementSpecs.Text("opening_l", "Width (mm)", "900"),
+            ["opening_h"] = ElementSpecs.Text("opening_h", "Height (mm)", "2100"),
+        };
+        var header = DeductSheetHeader;
+        header.Children.Clear();
+        header.ColumnDefinitions.Clear();
+        header.Background = SheetHeaderBg;
+        double totalW = 0;
+        for (int i = 0; i < _deductSheetColumns.Length; i++)
+        {
+            string key = _deductSheetColumns[i];
+            double w = key == "wall_mark" ? 140 : SheetColMinWidth;
             totalW += w;
-            SheetHeader.ColumnDefinitions.Add(new ColumnDefinition
-            {
-                Width = new GridLength(w),
-                MinWidth = w
-            });
-            string header = _sheetFieldByKey.TryGetValue(_sheetColumns[i], out var fd)
-                ? fd.Label
-                : PrettyHeader(_sheetColumns[i]);
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(w), MinWidth = w });
+            string label = _deductFieldByKey.TryGetValue(key, out var fd) ? fd.Label : key;
             var cell = new Border
             {
                 BorderBrush = SheetGridBrush,
@@ -1368,18 +1539,109 @@ public sealed partial class ElementPage : Page
                 Padding = new Thickness(8, 8, 8, 8),
                 Child = new TextBlock
                 {
-                    Text = header,
+                    Text = label,
                     FontSize = 12,
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                    Foreground = SheetHeaderFg,
-                    VerticalAlignment = VerticalAlignment.Center
+                    Foreground = SheetHeaderFg
                 }
             };
             Grid.SetColumn(cell, i);
-            SheetHeader.Children.Add(cell);
+            header.Children.Add(cell);
         }
-        ApplySheetWideSize(totalW);
+    }
+
+    private string[] WallMarkOptions()
+    {
+        var marks = ProjectStore.Current.MasonryWalls
+            .Select(w => w.TryGetValue("mark", out var m) ? m.Trim() : "")
+            .Where(m => m.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(m => m, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return marks.Length > 0 ? marks : new[] { "MW1" };
+    }
+
+    private void BuildSheetHeaderCore(
+        string tab,
+        Grid header,
+        out string[] columns,
+        out Dictionary<string, FieldDef> fieldByKey,
+        bool includeMarkAlways)
+    {
+        var keys = new List<string>();
+        fieldByKey = new Dictionary<string, FieldDef>(StringComparer.OrdinalIgnoreCase);
+        foreach (var f in _spec.Fields)
+        {
+            if (f.Kind == FieldKind.Section) continue;
+            if (MemberSheetHelper.IsSheetHiddenKey(_spec.Kind, f.Key)) continue;
+            string st = string.IsNullOrEmpty(f.SheetTab) ? "entry" : f.SheetTab;
+            if (tab == "entry" && st == "deductions") continue;
+            if (tab == "deductions" && st != "deductions" && !(includeMarkAlways && f.Key.Equals("mark", StringComparison.OrdinalIgnoreCase)))
+                continue;
+            if (keys.Contains(f.Key, StringComparer.OrdinalIgnoreCase)) continue;
+            keys.Add(f.Key);
+            fieldByKey[f.Key] = f;
+        }
+        if (tab == "deductions" && includeMarkAlways && !keys.Contains("mark", StringComparer.OrdinalIgnoreCase))
+        {
+            keys.Insert(0, "mark");
+            var markFd = _spec.Fields.FirstOrDefault(f => f.Key.Equals("mark", StringComparison.OrdinalIgnoreCase));
+            if (markFd is not null) fieldByKey["mark"] = markFd;
+        }
+        if (keys.Count == 0)
+            keys.AddRange(_spec.InputKeys.Length > 0 ? _spec.InputKeys : new[] { "mark" });
+
+        // Finish reconcile: only useful columns
+        if (_spec.IsFinishReconcile && tab == "entry")
+        {
+            keys = new List<string> { "mark", "member_type", "source_mark", "include", "area_m2",
+                "faces", "sides_exposed", "plaster_sides", "plaster_soffit", "plaster_ceiling", "notes" };
+            fieldByKey = _spec.Fields
+                .Where(f => f.Kind != FieldKind.Section)
+                .GroupBy(f => f.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        }
+
+        columns = keys.ToArray();
+        header.Children.Clear();
+        header.ColumnDefinitions.Clear();
+        header.Background = SheetHeaderBg;
+        header.Padding = new Thickness(0);
+        double totalW = 0;
+        for (int i = 0; i < columns.Length; i++)
+        {
+            double w = SheetColumnWidth(columns[i]);
+            totalW += w;
+            header.ColumnDefinitions.Add(new ColumnDefinition
+            {
+                Width = new GridLength(w),
+                MinWidth = w
+            });
+            string headerText = fieldByKey.TryGetValue(columns[i], out var fd)
+                ? fd.Label
+                : PrettyHeader(columns[i]);
+            var cell = new Border
+            {
+                BorderBrush = SheetGridBrush,
+                BorderThickness = new Thickness(0, 0, 1, 0),
+                Background = SheetHeaderBg,
+                Padding = new Thickness(8, 8, 8, 8),
+                Child = new TextBlock
+                {
+                    Text = headerText,
+                    FontSize = 12,
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    Foreground = SheetHeaderFg
+                }
+            };
+            Grid.SetColumn(cell, i);
+            header.Children.Add(cell);
+        }
+        if (header.Parent is FrameworkElement fe && fe.Parent is FrameworkElement wide)
+            wide.MinWidth = Math.Max(400, totalW);
+        if (ReferenceEquals(header, SheetHeader))
+            ApplySheetWideSize(totalW);
     }
 
     private double SheetColumnWidth(string key)
@@ -1490,6 +1752,10 @@ public sealed partial class ElementPage : Page
                 value ??= "";
                 _sheetFieldByKey.TryGetValue(key, out var field);
                 bool cellReadOnly = readOnlyRow && !key.Equals("include", StringComparison.OrdinalIgnoreCase);
+                if (_spec.IsFinishReconcile)
+                {
+                    cellReadOnly = key is "mark" or "member_type" or "source_mark" or "area_m2" or "notes";
+                }
                 Brush cellBg = cellReadOnly ? SheetReadonlyBg : rowBg;
 
                 FrameworkElement content;
@@ -1526,13 +1792,11 @@ public sealed partial class ElementPage : Page
                         VerticalAlignment = VerticalAlignment.Stretch,
                         Margin = new Thickness(0),
                         Padding = new Thickness(6, 4, 6, 4),
-                        IsReadOnly = cellReadOnly,
-                        IsEnabled = true,
-                        IsTabStop = !cellReadOnly,
-                        AcceptsReturn = false,
-                        Background = SheetCellBg,
-                        Foreground = SheetCellFg,
                         BorderThickness = new Thickness(0),
+                        Background = cellBg,
+                        Foreground = SheetCellFg,
+                        IsReadOnly = cellReadOnly,
+                        IsHitTestVisible = !cellReadOnly,
                         Tag = (r, key)
                     };
                     if (!cellReadOnly)
@@ -1544,25 +1808,211 @@ public sealed partial class ElementPage : Page
                     content = tb;
                 }
 
-                var cellBorder = new Border
+                var border = new Border
                 {
                     BorderBrush = SheetGridBrush,
                     BorderThickness = new Thickness(0, 0, 1, 1),
                     Background = cellBg,
                     Child = content
                 };
-                Grid.SetColumn(cellBorder, c);
-                g.Children.Add(cellBorder);
+                Grid.SetColumn(border, c);
+                g.Children.Add(border);
             }
 
+            g.PointerPressed += SheetRow_PointerPressed;
             SheetRowsHost.Children.Add(g);
         }
 
-        CountText.Text = MemberSheetHelper.UsesFloorScope(_spec.Kind) && !_spec.IsComputedFromRcc
+        ApplySheetWideSize(totalW);
+        CountText.Text = MemberSheetHelper.UsesFloorScope(_spec.Kind) && !_spec.IsComputedFromRcc && !_spec.IsFinishReconcile
             ? $"{indices.Count} on floor · {_rows.Count} total"
-            : $"{_rows.Count} row{(_rows.Count == 1 ? "" : "s")}";
+            : $"{_rows.Count} row(s)";
+        if (_spec.Kind == "masonry")
+            RefreshDeductSheet();
         UpdateRecordLabel();
-        ApplySheetWideSize();
+    }
+
+    private void SheetRow_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: int storeIndex }) return;
+        if (storeIndex < 0 || storeIndex >= _rows.Count) return;
+        _sheetEditRow = storeIndex;
+        LoadRecord(storeIndex);
+    }
+
+    private void RefreshDeductSheet()
+    {
+        if (DeductSheetRowsHost is null || _openingRows is null || _deductSheetColumns.Length == 0) return;
+        // Refresh wall mark options
+        if (_deductFieldByKey.TryGetValue("wall_mark", out var wmField))
+        {
+            _deductFieldByKey["wall_mark"] = ElementSpecs.Combo("wall_mark", "Wall mark", WallMarkOptions(),
+                wmField.Default);
+        }
+        DeductSheetRowsHost.Children.Clear();
+        double totalW = 0;
+        foreach (var key in _deductSheetColumns)
+            totalW += key == "wall_mark" ? 140 : SheetColMinWidth;
+        totalW = Math.Max(totalW, SheetColMinWidth);
+
+        for (int r = 0; r < _openingRows.Count; r++)
+        {
+            var data = _openingRows[r];
+            // Floor filter: show openings whose wall is on current floor (or opening level matches)
+            if (MemberSheetHelper.UsesFloorScope("masonry"))
+            {
+                string oLevel = data.TryGetValue("level", out var ol) ? ol : "";
+                string wallMark = data.TryGetValue("wall_mark", out var wm) ? wm : "";
+                var wall = ProjectStore.Current.MasonryWalls.FirstOrDefault(w =>
+                    w.TryGetValue("mark", out var m) && m.Equals(wallMark, StringComparison.OrdinalIgnoreCase));
+                if (wall is not null && wall.TryGetValue("level", out var wl) && !string.IsNullOrWhiteSpace(wl))
+                    oLevel = wl;
+                if (!string.IsNullOrWhiteSpace(oLevel)
+                    && !oLevel.Equals(_sheetFloorId, StringComparison.OrdinalIgnoreCase))
+                    continue;
+            }
+
+            bool active = r == _deductEditRow;
+            var rowBg = active ? SheetActiveRowBg : SheetCellBg;
+            var g = new Grid
+            {
+                Width = totalW,
+                MinHeight = 34,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Background = rowBg,
+                Tag = r
+            };
+            for (int c = 0; c < _deductSheetColumns.Length; c++)
+            {
+                string key = _deductSheetColumns[c];
+                double colW = key == "wall_mark" ? 140 : SheetColMinWidth;
+                g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(colW), MinWidth = colW });
+                data.TryGetValue(key, out var value);
+                value ??= "";
+                _deductFieldByKey.TryGetValue(key, out var field);
+                FrameworkElement content;
+                if (field is not null && IsSheetDropdown(field))
+                {
+                    var cb = new ComboBox
+                    {
+                        Margin = new Thickness(1),
+                        Padding = new Thickness(4, 2, 4, 2),
+                        Background = SheetCellBg,
+                        Foreground = SheetCellFg,
+                        BorderThickness = new Thickness(1),
+                        BorderBrush = SheetGridBrush,
+                        Tag = ("opening", r, key),
+                        HorizontalAlignment = HorizontalAlignment.Stretch
+                    };
+                    _sheetComboFillBusy = true;
+                    FillSheetDropdown(cb, field, value);
+                    _sheetComboFillBusy = false;
+                    cb.SelectionChanged += OpeningCombo_SelectionChanged;
+                    content = cb;
+                }
+                else
+                {
+                    var tb = new TextBox
+                    {
+                        Text = value,
+                        Margin = new Thickness(0),
+                        Padding = new Thickness(6, 4, 6, 4),
+                        BorderThickness = new Thickness(0),
+                        Background = SheetCellBg,
+                        Foreground = SheetCellFg,
+                        Tag = ("opening", r, key),
+                        HorizontalAlignment = HorizontalAlignment.Stretch
+                    };
+                    tb.LostFocus += OpeningText_LostFocus;
+                    content = tb;
+                }
+                var border = new Border
+                {
+                    BorderBrush = SheetGridBrush,
+                    BorderThickness = new Thickness(0, 0, 1, 1),
+                    Background = rowBg,
+                    Child = content
+                };
+                Grid.SetColumn(border, c);
+                g.Children.Add(border);
+            }
+            g.PointerPressed += OpeningRow_PointerPressed;
+            DeductSheetRowsHost.Children.Add(g);
+        }
+    }
+
+    private void OpeningRow_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: int idx })
+            _deductEditRow = idx;
+    }
+
+    private void OpeningCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_sheetComboFillBusy) return;
+        if (sender is not ComboBox { Tag: ValueTuple<string, int, string> tag } cb) return;
+        if (tag.Item1 != "opening") return;
+        CommitOpeningCell(tag.Item2, tag.Item3, cb.SelectedItem?.ToString() ?? "");
+    }
+
+    private void OpeningText_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TextBox { Tag: ValueTuple<string, int, string> tag } tb) return;
+        if (tag.Item1 != "opening") return;
+        CommitOpeningCell(tag.Item2, tag.Item3, tb.Text ?? "");
+    }
+
+    private void CommitOpeningCell(int rowIndex, string key, string value)
+    {
+        if (_openingRows is null || rowIndex < 0 || rowIndex >= _openingRows.Count) return;
+        var data = _openingRows[rowIndex];
+        data.TryGetValue(key, out var prev);
+        if (string.Equals(prev ?? "", value, StringComparison.Ordinal)) return;
+        data[key] = value;
+        if (key.Equals("wall_mark", StringComparison.OrdinalIgnoreCase))
+        {
+            var wall = ProjectStore.Current.MasonryWalls.FirstOrDefault(w =>
+                w.TryGetValue("mark", out var m) && m.Equals(value, StringComparison.OrdinalIgnoreCase));
+            if (wall is not null && wall.TryGetValue("level", out var lv))
+                data["level"] = lv;
+        }
+        _sheetEditBusy = true;
+        ProjectStore.Current.Notify();
+        _sheetEditBusy = false;
+    }
+
+    private void AddOpening_Click(object sender, RoutedEventArgs e)
+    {
+        if (_openingRows is null) return;
+        string wall = WallMarkOptions().FirstOrDefault() ?? "MW1";
+        var wallRow = ProjectStore.Current.MasonryWalls.FirstOrDefault(w =>
+            w.TryGetValue("mark", out var m) && m.Equals(wall, StringComparison.OrdinalIgnoreCase));
+        string level = wallRow is not null && wallRow.TryGetValue("level", out var lv) ? lv : _sheetFloorId;
+        _openingRows.Add(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["wall_mark"] = wall,
+            ["level"] = level,
+            ["opening_kind"] = "Other",
+            ["nos"] = "1",
+            ["opening_l"] = "900",
+            ["opening_h"] = "2100"
+        });
+        _deductEditRow = _openingRows.Count - 1;
+        ProjectStore.Current.Notify();
+        RefreshDeductSheet();
+    }
+
+    private void DeleteOpening_Click(object sender, RoutedEventArgs e)
+    {
+        if (_openingRows is null || _deductEditRow < 0 || _deductEditRow >= _openingRows.Count)
+        {
+            AppNotify.Warning("Select a line", "Click an opening row, then Delete line.");
+            return;
+        }
+        _openingRows.RemoveAt(_deductEditRow);
+        _deductEditRow = Math.Min(_deductEditRow, _openingRows.Count - 1);
+        ProjectStore.Current.Notify();
+        RefreshDeductSheet();
     }
 
     private void HighlightSheetRow(int storeIndex)
@@ -1606,6 +2056,12 @@ public sealed partial class ElementPage : Page
         {
             foreach (var lv in ProjectStore.Current.Levels)
                 cb.Items.Add(lv.Id);
+        }
+        else if (field.Key.Equals("wall_mark", StringComparison.OrdinalIgnoreCase))
+        {
+            cb.Items.Add("");
+            foreach (var m in WallMarkOptions())
+                if (!string.IsNullOrWhiteSpace(m)) cb.Items.Add(m);
         }
         else if (field.Kind == FieldKind.Dia)
         {
@@ -1921,14 +2377,34 @@ public sealed partial class ElementPage : Page
         data.TryGetValue(key, out var prev);
         if (string.Equals(prev ?? "", value, StringComparison.Ordinal)) return;
         data[key] = value;
+
+        if (_spec.Kind == "masonry" && key.Equals("wall_build", StringComparison.OrdinalIgnoreCase))
+            MasonryWallBuild.Apply(data, value);
+
+        if (_spec.IsFinishReconcile && key is "faces" or "sides_exposed" or "plaster_sides"
+            or "plaster_soffit" or "plaster_ceiling")
+            FinishSurfacesCalculator.RecalcArea(data);
+
         _sheetEditBusy = true;
         ProjectStore.Current.Notify();
         _sheetEditBusy = false;
         if (_editIndex == rowIndex)
         {
             SetEditorValue(key, value);
+            if (_spec.Kind == "masonry" && key.Equals("wall_build", StringComparison.OrdinalIgnoreCase))
+            {
+                SetEditorValue("unit_type", data.GetValueOrDefault("unit_type", ""));
+                SetEditorValue("thickness", data.GetValueOrDefault("thickness", ""));
+                SetEditorValue("block_size", data.GetValueOrDefault("block_size", ""));
+            }
+            if (_spec.IsFinishReconcile)
+                SetEditorValue("area_m2", data.GetValueOrDefault("area_m2", ""));
             RefreshDiagram();
         }
+        if (_spec.IsFinishReconcile)
+            RefreshSheet();
+        if (_spec.Kind == "masonry")
+            RefreshDeductSheet();
     }
 
     private void ShowError(string message)
@@ -1949,7 +2425,7 @@ public sealed partial class ElementPage : Page
 
     private void Generate_Click(object sender, RoutedEventArgs e)
     {
-        if (_rows.Count == 0)
+        if (_rows.Count == 0 && !_spec.IsFinishReconcile)
         {
             ShowError("Add at least one row in the sheet before generating.");
             return;
@@ -1959,12 +2435,25 @@ public sealed partial class ElementPage : Page
             foreach (var r in _rows)
                 MemberSheetHelper.StampDefaults(_spec.Kind, r);
 
-            var expanded = MemberSheetHelper.ExpandForGenerate(_spec.Kind, _rows);
-            string engineKind = MemberSheetHelper.EngineKind(_spec.Kind);
+            IEnumerable<Dictionary<string, string>> genRows = _rows;
+            string genKind = _spec.Kind;
+            if (_spec.IsFinishReconcile)
+            {
+                genRows = ProjectStore.Current.Plaster;
+                genKind = "plaster";
+                if (!genRows.Any())
+                {
+                    ShowError("Finalize finishes first (Reconcile → Finalize), or add manual plaster rows.");
+                    return;
+                }
+            }
+
+            var expanded = MemberSheetHelper.ExpandForGenerate(genKind, genRows);
+            string engineKind = MemberSheetHelper.EngineKind(genKind);
 
             GenResult res;
             if (_spec.IsCivilBoq)
-                res = CivilBoqCalculator.Generate(_spec.Kind, expanded);
+                res = CivilBoqCalculator.Generate(genKind, expanded);
             else
                 res = EngineClient.Generate(engineKind, ProjectStore.Current.SettingsJson(), expanded);
 

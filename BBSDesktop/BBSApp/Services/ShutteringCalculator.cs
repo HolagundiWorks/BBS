@@ -185,6 +185,10 @@ public static class ShutteringCalculator
             if (excluded.Contains(p.SourceMark) || excluded.Contains($"SH-{p.SourceMark}"))
                 continue;
             double area = p.AreaM2 * waste;
+            double Lm = Mm(p.DimSnapshot, "length") / 1000.0;
+            double Bm = Mm(p.DimSnapshot, "breadth") / 1000.0;
+            if (Bm <= 0) Bm = Mm(p.DimSnapshot, "depth") / 1000.0;
+            double Hm = Mm(p.DimSnapshot, "height") / 1000.0;
             yield return new CivilLine
             {
                 Element = "Shuttering",
@@ -194,6 +198,9 @@ public static class ShutteringCalculator
                 Unit = "m²",
                 Qty = Math.Round(area, 3),
                 AreaM2 = Math.Round(area, 3),
+                LengthM = Math.Round(Lm, 3),
+                BreadthM = Math.Round(Bm, 3),
+                HeightM = Math.Round(Hm, 3),
                 Notes = $"{p.Formula} · ×{waste:0.###} wastage · audit: {p.SourceMark}"
             };
         }

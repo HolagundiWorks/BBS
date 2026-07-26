@@ -26,8 +26,8 @@ public static class PdfExport
                     page.Margin(28);
                     page.DefaultTextStyle(x => x.FontSize(9).FontFamily(Fonts.Calibri));
 
-                    page.Header().Element(c => ReportHeader(c, store.Name, "BOQ / BBS project report"));
-                    page.Footer().Element(ReportFooter);
+                    page.Header().Element(c => ReportHeader(c, store, "Project report"));
+                    page.Footer().Element(c => ReportFooter(c, store));
 
                     page.Content().Column(col =>
                     {
@@ -40,6 +40,13 @@ public static class PdfExport
 
                         foreach (var sec in sections)
                             col.Item().Element(c => SectionBlock(c, sec));
+
+                        var civilLines = CivilBoqCalculator.BuildAll(store);
+                        if (civilLines.Count > 0)
+                        {
+                            col.Item().PageBreak();
+                            col.Item().Element(c => SketchPdf.DrawCivilBoqSketches(c, civilLines));
+                        }
                     });
                 });
             }).GeneratePdf(path);
@@ -80,9 +87,9 @@ public static class PdfExport
                     page.Margin(28);
                     page.DefaultTextStyle(x => x.FontSize(9).FontFamily(Fonts.Calibri));
 
-                    page.Header().Element(c => ReportHeader(c, store.Name,
+                    page.Header().Element(c => ReportHeader(c, store,
                         $"Purchase order · {levelLabel}" + (rmcMode ? " · RMC" : " · site batch")));
-                    page.Footer().Element(ReportFooter);
+                    page.Footer().Element(c => ReportFooter(c, store));
 
                     page.Content().Column(col =>
                     {
@@ -135,6 +142,75 @@ public static class PdfExport
                             {
                                 p.Category, p.Item, p.Unit, p.Qty.ToString("0.###"), p.Notes
                             }).ToList()));
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool ExportEstimate(
+        string path,
+        ProjectStore store,
+        EstimateResult result,
+        IReadOnlySet<string> levels,
+        out string? error)
+    {
+        error = null;
+        try
+        {
+            var levelLabel = levels.Count == 0
+                ? "none"
+                : levels.Count == store.Levels.Count && store.Levels.Count > 0
+                    ? "all storeys"
+                    : string.Join(", ", levels.OrderBy(x => x));
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Landscape());
+                    page.Margin(28);
+                    page.DefaultTextStyle(x => x.FontSize(7).FontFamily(Fonts.Calibri));
+
+                    page.Header().Element(c => ReportHeader(c, store,
+                        $"Abstract of cost (DSR) · {result.RateBookVersionName} · {levelLabel} · ₹ {result.GrandTotal:N2}"));
+                    page.Footer().Element(c => ReportFooter(c, store));
+
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(12);
+
+                        var headers = DsrEstimateFormat.Headers;
+                        int sl = 1;
+                        void AddSection(string title, IReadOnlyList<EstimateLine> lines)
+                        {
+                            var rows = DsrEstimateFormat.ToStringRows(lines, sl);
+                            sl += rows.Count;
+                            col.Item().Element(c => TableSection(c, title, headers, rows));
+                        }
+
+                        AddSection("I. Civil / finishes / doors / windows", result.Civil);
+                        AddSection("II. Materials", result.Materials);
+                        AddSection("III. Steel reinforcement", result.Steel);
+
+                        var mk = result.Markups;
+                        col.Item().PaddingTop(4).Text($"Base total (₹) : {mk.BaseTotal:N2}").FontSize(9);
+                        col.Item().Text($"Electrical {mk.ElectricalPct:0.##}% : ₹ {mk.ElectricalAmount:N2}").FontSize(8);
+                        col.Item().Text($"Plumbing {mk.PlumbingPct:0.##}% : ₹ {mk.PlumbingAmount:N2}").FontSize(8);
+                        col.Item().Text($"Escalation {mk.EscalationPct:0.##}% : ₹ {mk.EscalationAmount:N2}").FontSize(8);
+                        col.Item().Text($"Consulting / PMC fees {mk.ConsultingFeePct:0.##}% : ₹ {mk.ConsultingFeeAmount:N2}").FontSize(8);
+                        col.Item().PaddingTop(4).Text($"Grand total (₹) : {result.GrandTotal:N2}").Bold().FontSize(11);
+                        if (result.MissingCodes.Count > 0)
+                            col.Item().Text("Missing rates: " + string.Join(", ", result.MissingCodes)).FontColor(Colors.Red.Medium);
+
+                        col.Item().PageBreak();
+                        col.Item().Element(c => SketchPdf.DrawEstimateSketches(c, result.Civil));
                     });
                 });
             }).GeneratePdf(path);
@@ -217,7 +293,10 @@ public static class PdfExport
         addCivil("ssm", "Size stone masonry", store.SizeStone);
         addCivil("shuttering", "Shuttering / formwork", store.Shuttering);
         addCivil("flooring", "Flooring", store.Flooring);
+        FinishSurfacesCalculator.SyncPaintingFromPlaster(store);
         addCivil("painting", "Painting", store.Painting);
+        addCivil("doors", "Doors", store.Doors);
+        addCivil("windows", "Windows", store.Windows);
 
         // Project-level concrete by grade + materials
         var concrete = MaterialsCalculator.BuildConcreteBoq(store);
@@ -262,33 +341,56 @@ public static class PdfExport
         return list;
     }
 
-    private static void ReportHeader(IContainer container, string projectName, string subtitle)
+    private static void ReportHeader(IContainer container, ProjectStore store, string subtitle)
     {
+        var info = store.Info;
         container.Column(col =>
         {
             col.Item().Row(row =>
             {
+                var logoPath = info.ResolvedLogoPath;
+                if (logoPath is not null)
+                {
+                    row.ConstantItem(52).Height(40).PaddingRight(8)
+                        .AlignMiddle().Image(logoPath).FitArea();
+                }
+
                 row.RelativeItem().Column(c =>
                 {
-                    c.Item().Text(Branding.AppName).SemiBold().FontSize(14);
-                    c.Item().Text(subtitle).FontSize(10).FontColor(Colors.Grey.Darken2);
+                    c.Item().Text(info.CompanyDisplay).SemiBold().FontSize(12);
+                    c.Item().Text($"{Branding.AppName} · {subtitle}").FontSize(9).FontColor(Colors.Grey.Darken2);
+                    if (!string.IsNullOrWhiteSpace(info.ContactPhone) || !string.IsNullOrWhiteSpace(info.ContactEmail))
+                    {
+                        var bits = new List<string>();
+                        if (!string.IsNullOrWhiteSpace(info.ContactPhone)) bits.Add(info.ContactPhone);
+                        if (!string.IsNullOrWhiteSpace(info.ContactEmail)) bits.Add(info.ContactEmail);
+                        c.Item().Text(string.Join(" · ", bits)).FontSize(7).FontColor(Colors.Grey.Darken1);
+                    }
+                    if (!string.IsNullOrWhiteSpace(info.Address))
+                        c.Item().Text(info.Address).FontSize(7).FontColor(Colors.Grey.Darken1);
                 });
-                row.ConstantItem(180).AlignRight().Column(c =>
+
+                row.ConstantItem(200).AlignRight().Column(c =>
                 {
-                    c.Item().Text(projectName).SemiBold().FontSize(10);
-                    c.Item().Text(Branding.CompanyLine).FontSize(8).FontColor(Colors.Grey.Darken1);
-                    c.Item().Text(DateTime.Now.ToString("dd MMM yyyy HH:mm")).FontSize(8).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(info.Name).SemiBold().FontSize(10);
+                    if (!string.IsNullOrWhiteSpace(info.Location))
+                        c.Item().Text(info.Location).FontSize(8).FontColor(Colors.Grey.Darken1);
+                    if (!string.IsNullOrWhiteSpace(info.ClientName))
+                        c.Item().Text($"Client: {info.ClientName}").FontSize(8).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(info.PreparedByLine).FontSize(8).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(DateTime.Now.ToString("dd MMM yyyy HH:mm")).FontSize(7).FontColor(Colors.Grey.Darken1);
                 });
             });
             col.Item().PaddingTop(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
         });
     }
 
-    private static void ReportFooter(IContainer container)
+    private static void ReportFooter(IContainer container, ProjectStore store)
     {
+        var company = store.Info.CompanyDisplay;
         container.AlignCenter().Text(t =>
         {
-            t.Span($"{Branding.AppName} · {Branding.CompanyLine}  ·  ").FontSize(8).FontColor(Colors.Grey.Darken1);
+            t.Span($"{Branding.AppName} · {company}  ·  ").FontSize(8).FontColor(Colors.Grey.Darken1);
             t.Span("Page ").FontSize(8).FontColor(Colors.Grey.Darken1);
             t.CurrentPageNumber().FontSize(8).FontColor(Colors.Grey.Darken1);
             t.Span(" / ").FontSize(8).FontColor(Colors.Grey.Darken1);

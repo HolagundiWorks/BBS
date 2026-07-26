@@ -13,7 +13,8 @@ public static class MemberSheetHelper
         or "pedestals" or "lintels"
         or "masonry" or "plaster" or "pcc" or "earthwork" or "ssm"
         or "flooring" or "painting" or "waterproofing" or "dpc" or "coping"
-        or "screed" or "vdf" or "skirting" or "parapet" or "plinth_protection";
+        or "screed" or "vdf" or "skirting" or "parapet" or "plinth_protection"
+        or "doors" or "windows";
 
     public static bool IsSheetHiddenKey(string kind, string key)
     {
@@ -22,6 +23,12 @@ public static class MemberSheetHelper
         if (key.Equals("cover", StringComparison.OrdinalIgnoreCase)) return true;
         if (key.Equals("provide_lap", StringComparison.OrdinalIgnoreCase)) return true;
         if (key.Equals("lap_nos", StringComparison.OrdinalIgnoreCase)) return true;
+        if (kind == "masonry")
+        {
+            if (key.Equals("unit_type", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.Equals("thickness", StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.Equals("block_size", StringComparison.OrdinalIgnoreCase)) return true;
+        }
         return false;
     }
 
@@ -38,6 +45,8 @@ public static class MemberSheetHelper
             "footings" => "F",
             "walls" => "RW",
             "stairs" => "ST",
+            "doors" => "D",
+            "windows" => "W",
             _ => "R"
         };
     }
@@ -176,6 +185,9 @@ public static class MemberSheetHelper
         if (kind == "beams" &&
             (!row.TryGetValue("beam_type", out var bt) || string.IsNullOrWhiteSpace(bt)))
             row["beam_type"] = level.Equals("Lvl0", StringComparison.OrdinalIgnoreCase) ? "PB" : "RB";
+
+        if (kind == "masonry")
+            MasonryWallBuild.EnsureWallBuild(row);
 
         if (kind == "lintels") EnsureLintelSpan(row);
     }

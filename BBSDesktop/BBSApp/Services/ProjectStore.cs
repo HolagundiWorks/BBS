@@ -10,9 +10,19 @@ public sealed class ProjectStore
 {
     public static ProjectStore Current { get; } = new();
 
-    public string Name { get; set; } = "Untitled Project";
+    public string Name
+    {
+        get => Info.Name;
+        set => Info.Name = value;
+    }
     public string? FilePath { get; set; }
     public bool IsDirty { get; set; }
+
+    /// <summary>Project identity: client, company, prepared-by, logo.</summary>
+    public ProjectInfo Info { get; } = new();
+
+    /// <summary>Estimate % add-ons: electrical, plumbing, escalation, consulting fees.</summary>
+    public EstimateMarkups Markups { get; } = new();
 
     public ObservableCollection<int> Diameters { get; } = new() { 8, 10, 12, 16, 20, 25, 28, 32, 36, 40 };
     public ObservableCollection<LevelDef> Levels { get; } = new();
@@ -36,7 +46,11 @@ public sealed class ProjectStore
     public ObservableCollection<Dictionary<string, string>> Stairs { get; } = new();
     // Civil BOQ
     public ObservableCollection<Dictionary<string, string>> MasonryWalls { get; } = new();
+    /// <summary>One opening type per line; same wall_mark can repeat. Fields: wall_mark, nos, opening_l, opening_h, level.</summary>
+    public ObservableCollection<Dictionary<string, string>> MasonryOpenings { get; } = new();
     public ObservableCollection<Dictionary<string, string>> Plaster { get; } = new();
+    /// <summary>Proposed plaster/paint surfaces before Finalize (walls + RCC exposure).</summary>
+    public ObservableCollection<Dictionary<string, string>> FinishPropose { get; } = new();
     public ObservableCollection<Dictionary<string, string>> PccBeds { get; } = new();
     public ObservableCollection<Dictionary<string, string>> Earthwork { get; } = new();
     public ObservableCollection<Dictionary<string, string>> SizeStone { get; } = new();
@@ -51,9 +65,15 @@ public sealed class ProjectStore
     public ObservableCollection<Dictionary<string, string>> Skirting { get; } = new();
     public ObservableCollection<Dictionary<string, string>> Parapet { get; } = new();
     public ObservableCollection<Dictionary<string, string>> PlinthProtection { get; } = new();
+    public ObservableCollection<Dictionary<string, string>> Doors { get; } = new();
+    public ObservableCollection<Dictionary<string, string>> Windows { get; } = new();
 
     public CivilYields Yields { get; } = new();
     public TakeoffState Takeoff { get; } = new();
+
+    /// <summary>Last calculated estimate snapshot (qty × rates).</summary>
+    public EstimateResult? LastEstimate { get; set; }
+    public string? LastEstimateRateBookVersionId { get; set; }
 
     /// <summary>IS 456 Cl. 26.4 nominal covers (mm) by member family.</summary>
     public double CoverColumnMm { get; set; } = 40;
@@ -157,7 +177,11 @@ public sealed class ProjectStore
                 ["wastage"] = Yields.Wastage,
                 ["shuttering_wastage"] = Yields.ShutteringWastage,
                 ["ignore_opening_below_m2"] = Yields.IgnoreOpeningBelowM2,
-                ["beam_slab_interface_deduct"] = Yields.BeamSlabInterfaceDeduct ? 1 : 0
+                ["beam_slab_interface_deduct"] = Yields.BeamSlabInterfaceDeduct ? 1 : 0,
+                ["wall_plaster_faces"] = Yields.WallPlasterFaces,
+                ["default_column_sides_exposed"] = Yields.DefaultColumnSidesExposed,
+                ["default_plaster_ceiling"] = Yields.DefaultPlasterCeiling ? 1 : 0,
+                ["default_beam_soffit"] = Yields.DefaultBeamSoffit ? 1 : 0
             }
         };
     }
@@ -179,8 +203,10 @@ public sealed class ProjectStore
         return new JsonObject
         {
             ["format"] = "bbsproj",
-            ["version"] = 6,
+            ["version"] = 9,
             ["name"] = Name,
+            ["project"] = Info.ToJson(),
+            ["estimate_markups"] = Markups.ToJson(),
             ["concrete_from_rmc"] = ConcreteFromRmc ? 1 : 0,
             ["settings"] = SettingsJson(),
             ["levels"] = levels,
@@ -193,7 +219,9 @@ public sealed class ProjectStore
             ["walls"] = RowsToJson(Walls),
             ["stairs"] = RowsToJson(Stairs),
             ["masonry"] = RowsToJson(MasonryWalls),
+            ["masonry_openings"] = RowsToJson(MasonryOpenings),
             ["plaster"] = RowsToJson(Plaster),
+            ["finish_propose"] = RowsToJson(FinishPropose),
             ["pcc"] = RowsToJson(PccBeds),
             ["earthwork"] = RowsToJson(Earthwork),
             ["ssm"] = RowsToJson(SizeStone),
@@ -208,7 +236,11 @@ public sealed class ProjectStore
             ["skirting"] = RowsToJson(Skirting),
             ["parapet"] = RowsToJson(Parapet),
             ["plinth_protection"] = RowsToJson(PlinthProtection),
-            ["takeoff"] = Takeoff.ToJson()
+            ["doors"] = RowsToJson(Doors),
+            ["windows"] = RowsToJson(Windows),
+            ["takeoff"] = Takeoff.ToJson(),
+            ["last_estimate"] = LastEstimate is null ? null : EstimateCalculator.ToJson(LastEstimate),
+            ["last_estimate_rate_book_version_id"] = LastEstimateRateBookVersionId ?? ""
         };
     }
 
@@ -227,14 +259,24 @@ public sealed class ProjectStore
     public void LoadFrom(JsonObject root)
     {
         Name = root["name"]?.GetValue<string>() ?? "Untitled Project";
+        Info.LoadFrom(root["project"] as JsonObject);
+        Markups.LoadFrom(root["estimate_markups"] as JsonObject);
+        // Keep legacy root name in sync if project block missing name
+        if (string.IsNullOrWhiteSpace(Info.Name) || Info.Name == "Untitled Project")
+            Info.Name = Name;
+        else
+            Name = Info.Name;
         ConcreteFromRmc = NumRoot(root, "concrete_from_rmc", 1) != 0;
         Columns.Clear(); Beams.Clear(); Pedestals.Clear(); Lintels.Clear();
         Slabs.Clear(); Footings.Clear(); Walls.Clear(); Stairs.Clear();
-        MasonryWalls.Clear(); Plaster.Clear(); PccBeds.Clear(); Earthwork.Clear(); SizeStone.Clear();
+        MasonryWalls.Clear(); MasonryOpenings.Clear(); Plaster.Clear(); FinishPropose.Clear(); PccBeds.Clear(); Earthwork.Clear(); SizeStone.Clear();
         Shuttering.Clear(); Flooring.Clear(); Painting.Clear();
         Waterproofing.Clear(); Dpc.Clear(); Coping.Clear(); Screed.Clear();
         Vdf.Clear(); Skirting.Clear(); Parapet.Clear(); PlinthProtection.Clear();
+        Doors.Clear(); Windows.Clear();
         Levels.Clear();
+        LastEstimate = null;
+        LastEstimateRateBookVersionId = null;
         LoadRows(root["columns"] as JsonArray, Columns);
         LoadRows(root["beams"] as JsonArray, Beams);
         LoadRows(root["pedestals"] as JsonArray, Pedestals);
@@ -244,7 +286,11 @@ public sealed class ProjectStore
         LoadRows(root["walls"] as JsonArray, Walls);
         LoadRows(root["stairs"] as JsonArray, Stairs);
         LoadRows(root["masonry"] as JsonArray, MasonryWalls);
+        foreach (var mw in MasonryWalls) MasonryWallBuild.EnsureWallBuild(mw);
+        LoadRows(root["masonry_openings"] as JsonArray, MasonryOpenings);
+        MigrateMasonryOpeningsFromWalls();
         LoadRows(root["plaster"] as JsonArray, Plaster);
+        LoadRows(root["finish_propose"] as JsonArray, FinishPropose);
         LoadRows(root["pcc"] as JsonArray, PccBeds);
         LoadRows(root["earthwork"] as JsonArray, Earthwork);
         LoadRows(root["ssm"] as JsonArray, SizeStone);
@@ -259,7 +305,11 @@ public sealed class ProjectStore
         LoadRows(root["skirting"] as JsonArray, Skirting);
         LoadRows(root["parapet"] as JsonArray, Parapet);
         LoadRows(root["plinth_protection"] as JsonArray, PlinthProtection);
+        LoadRows(root["doors"] as JsonArray, Doors);
+        LoadRows(root["windows"] as JsonArray, Windows);
         Takeoff.LoadFrom(root["takeoff"] as JsonObject);
+        LastEstimate = EstimateCalculator.FromJson(root["last_estimate"] as JsonObject);
+        LastEstimateRateBookVersionId = root["last_estimate_rate_book_version_id"]?.GetValue<string>();
         if (root["levels"] is JsonArray la)
         {
             foreach (var item in la)
@@ -315,13 +365,66 @@ public sealed class ProjectStore
                 Yields.ShutteringWastage = Num(y, "shuttering_wastage", 1.05);
                 Yields.IgnoreOpeningBelowM2 = Num(y, "ignore_opening_below_m2", 0.1);
                 Yields.BeamSlabInterfaceDeduct = Num(y, "beam_slab_interface_deduct", 0) != 0;
+                Yields.WallPlasterFaces = (int)Num(y, "wall_plaster_faces", 2);
+                Yields.DefaultColumnSidesExposed = (int)Num(y, "default_column_sides_exposed", 3);
+                Yields.DefaultPlasterCeiling = Num(y, "default_plaster_ceiling", 0) != 0;
+                Yields.DefaultBeamSoffit = Num(y, "default_beam_soffit", 0) != 0;
             }
         }
 
         ShutteringCalculator.SyncStore(this);
+        if (FinishPropose.Count == 0)
+            FinishSurfacesCalculator.SyncPropose(this);
         MigratePedestalsFromColumns();
         IsDirty = false;
         Changed?.Invoke();
+    }
+
+    /// <summary>Move legacy opening_*/opening2_* on wall rows into MasonryOpenings (one type per line).</summary>
+    private void MigrateMasonryOpeningsFromWalls()
+    {
+        foreach (var w in MasonryWalls)
+        {
+            string mark = w.TryGetValue("mark", out var m) ? m : "";
+            if (string.IsNullOrWhiteSpace(mark)) continue;
+            string level = w.TryGetValue("level", out var lv) ? lv : "Lvl0";
+
+            void Take(string nosKey, string lKey, string hKey)
+            {
+                if (!w.TryGetValue(nosKey, out var ns) || string.IsNullOrWhiteSpace(ns)) return;
+                if (!int.TryParse(ns, NumberStyles.Integer, CultureInfo.InvariantCulture, out var nos) || nos <= 0)
+                {
+                    // clear legacy even if zero
+                }
+                else
+                {
+                    string ol = w.TryGetValue(lKey, out var l) ? l : "0";
+                    string oh = w.TryGetValue(hKey, out var h) ? h : "0";
+                    bool exists = MasonryOpenings.Any(o =>
+                        o.TryGetValue("wall_mark", out var wm) && wm.Equals(mark, StringComparison.OrdinalIgnoreCase)
+                        && o.TryGetValue("opening_l", out var xl) && xl == ol
+                        && o.TryGetValue("opening_h", out var xh) && xh == oh
+                        && o.TryGetValue("nos", out var xn) && xn == nos.ToString(CultureInfo.InvariantCulture));
+                    if (!exists)
+                    {
+                        MasonryOpenings.Add(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["wall_mark"] = mark,
+                            ["level"] = level,
+                            ["nos"] = nos.ToString(CultureInfo.InvariantCulture),
+                            ["opening_l"] = ol,
+                            ["opening_h"] = oh
+                        });
+                    }
+                }
+                w.Remove(nosKey);
+                w.Remove(lKey);
+                w.Remove(hKey);
+            }
+
+            Take("opening_nos", "opening_l", "opening_h");
+            Take("opening2_nos", "opening2_l", "opening2_h");
+        }
     }
 
     /// <summary>One-time: copy embedded column pedestal fields into Pedestals collection.</summary>
@@ -407,19 +510,24 @@ public sealed class ProjectStore
 
     public void Reset()
     {
-        Name = "Untitled Project";
+        Info.Reset();
+        Markups.Reset();
+        Name = Info.Name;
         FilePath = null;
         Columns.Clear(); Beams.Clear(); Pedestals.Clear(); Lintels.Clear();
         Slabs.Clear(); Footings.Clear(); Walls.Clear(); Stairs.Clear();
-        MasonryWalls.Clear(); Plaster.Clear(); PccBeds.Clear(); Earthwork.Clear(); SizeStone.Clear();
+        MasonryWalls.Clear(); MasonryOpenings.Clear(); Plaster.Clear(); FinishPropose.Clear(); PccBeds.Clear(); Earthwork.Clear(); SizeStone.Clear();
         Shuttering.Clear(); Flooring.Clear(); Painting.Clear();
         Waterproofing.Clear(); Dpc.Clear(); Coping.Clear(); Screed.Clear();
         Vdf.Clear(); Skirting.Clear(); Parapet.Clear(); PlinthProtection.Clear();
+        Doors.Clear(); Windows.Clear();
         Takeoff.Clear();
         Levels.Clear();
         LastSummary = null;
         LastBbs = null;
         LastCivilSummary = null;
+        LastEstimate = null;
+        LastEstimateRateBookVersionId = null;
         IsDirty = false;
         EnsureDefaultLevels();
         SeedDefaults();
@@ -517,23 +625,36 @@ public sealed class ProjectStore
                 ["landing_dia"] = "10", ["landing_spacing"] = "150"
             });
         if (MasonryWalls.Count == 0)
-            MasonryWalls.Add(new Dictionary<string, string>
+        {
+            var mw = new Dictionary<string, string>
             {
                 ["mark"] = "MW1", ["level"] = "Lvl0", ["length"] = "5000", ["height"] = "3000",
-                ["thickness"] = "230", ["unit_type"] = "Brick", ["mortar_mix"] = "1:6",
-                ["deduct_rule"] = "IS1200 masonry",
-                ["opening_nos"] = "1", ["opening_l"] = "900", ["opening_h"] = "2100",
-                ["opening2_nos"] = "0", ["opening2_l"] = "0", ["opening2_h"] = "0",
-                ["block_size"] = "600x200x150"
-            });
-        if (Plaster.Count == 0)
-            Plaster.Add(new Dictionary<string, string>
+                ["mortar_mix"] = "1:6",
+                ["deduct_rule"] = "IS1200 masonry"
+            };
+            MasonryWallBuild.Apply(mw, "Brick · 230 mm");
+            MasonryWalls.Add(mw);
+        }
+        else
+        {
+            foreach (var mw in MasonryWalls) MasonryWallBuild.EnsureWallBuild(mw);
+        }
+        MigrateMasonryOpeningsFromWalls();
+        if (MasonryOpenings.Count == 0 && MasonryWalls.Count > 0)
+        {
+            string wm = MasonryWalls[0].TryGetValue("mark", out var m) ? m : "MW1";
+            string wl = MasonryWalls[0].TryGetValue("level", out var l) ? l : "Lvl0";
+            MasonryOpenings.Add(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["mark"] = "PL1", ["level"] = "Lvl0", ["length"] = "5000", ["height"] = "3000",
-                ["thickness"] = "12", ["faces"] = "1", ["mortar_mix"] = "1:4",
-                ["deduct_rule"] = "IS1200 plaster/paint", ["add_jambs"] = "No", ["jamb_depth"] = "100",
-                ["opening_nos"] = "1", ["opening_l"] = "900", ["opening_h"] = "2100"
+                ["wall_mark"] = wm,
+                ["level"] = wl,
+                ["nos"] = "1",
+                ["opening_l"] = "900",
+                ["opening_h"] = "2100"
             });
+        }
+        // Plaster/paint auto rows come from FinishSurfaces Finalize — no seed row.
+        FinishSurfacesCalculator.SyncPropose(this);
         if (PccBeds.Count == 0)
             PccBeds.Add(new Dictionary<string, string>
             {
@@ -557,17 +678,28 @@ public sealed class ProjectStore
         if (Flooring.Count == 0)
             Flooring.Add(new Dictionary<string, string>
             {
-                ["mark"] = "FL1", ["level"] = "Lvl0", ["finish_type"] = "Tile",
+                ["mark"] = "FL1", ["level"] = "Lvl0",
+                ["surface_kind"] = "Floor",
+                ["finish_type"] = "Vitrified tiles",
+                ["tile_size"] = "600×600",
                 ["length"] = "4000", ["breadth"] = "3000", ["deduct_rule"] = "Openings full",
                 ["opening_nos"] = "0", ["opening_l"] = "0", ["opening_h"] = "0"
             });
-        if (Painting.Count == 0)
-            Painting.Add(new Dictionary<string, string>
+        if (Doors.Count == 0)
+            Doors.Add(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["mark"] = "PT1", ["level"] = "Lvl0", ["paint_type"] = "Emulsion",
-                ["length"] = "5000", ["height"] = "3000", ["faces"] = "1", ["coats"] = "2",
-                ["deduct_rule"] = "IS1200 plaster/paint", ["add_jambs"] = "No", ["jamb_depth"] = "100",
-                ["opening_nos"] = "1", ["opening_l"] = "900", ["opening_h"] = "2100"
+                ["mark"] = "D1", ["level"] = "Lvl0", ["door_type"] = "Wood door", ["nos"] = "1",
+                ["width"] = "900", ["height"] = "2100",
+                ["frame_size"] = "110×150", ["shutter_thick"] = "32 mm", ["shutter_type"] = "Block Board",
+                ["wood_finish"] = "Varnish"
+            });
+        if (Windows.Count == 0)
+            Windows.Add(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["mark"] = "W1", ["level"] = "Lvl0", ["window_system"] = "System Aluminium", ["nos"] = "2",
+                ["width"] = "1200", ["height"] = "1200", ["track"] = "2.5 Track",
+                ["wood_opening"] = "Single shutter — open outside",
+                ["wood_finish"] = "Varnish"
             });
     }
 }

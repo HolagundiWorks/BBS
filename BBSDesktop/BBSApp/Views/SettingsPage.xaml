@@ -3,151 +3,325 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent">
-    <ScrollViewer>
-        <StackPanel Spacing="12"
-                    MaxWidth="560"
-                    Padding="{StaticResource PagePadding}"
-                    Transitions="{StaticResource PageContentTransitions}">
-            <StackPanel Spacing="2">
-                <TextBlock Text="Settings" Style="{StaticResource PageTitleStyle}"/>
-                <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                           Text="IS 456 / IS 2502 project defaults used by the schedule engine."/>
-            </StackPanel>
+    <Grid Padding="{StaticResource PagePadding}"
+          RowSpacing="12"
+          MaxWidth="640"
+          Transitions="{StaticResource PageContentTransitions}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-            <StackPanel Spacing="4">
-                <TextBlock Text="Bar diameters" Style="{StaticResource SectionHeaderStyle}"/>
-                <Border Style="{StaticResource FluentCardStyle}">
-                    <TextBox x:Name="DiaBox"
-                             Header="Available bar diameters (mm)"
-                             PlaceholderText="8, 10, 12, 16, 20, 25…"
-                             AutomationProperties.Name="Available bar diameters"/>
-                </Border>
-            </StackPanel>
-
-            <StackPanel Spacing="4">
-                <TextBlock Text="Development length (IS 456 Cl. 26.2.1)" Style="{StaticResource SectionHeaderStyle}"/>
-                <Border Style="{StaticResource FluentCardStyle}">
-                    <StackPanel Spacing="{StaticResource SpacingS}">
-                        <ToggleSwitch x:Name="HysdBondToggle"
-                                      Header="HYSD / deformed bond (τbd × 1.6)"
-                                      OnContent="On" OffContent="Off"
-                                      AutomationProperties.Name="HYSD bond factor"/>
-                        <NumberBox x:Name="HysdFactorBox"
-                                   Header="Bond factor (default 1.6)"
-                                   Minimum="1" Maximum="2" SmallChange="0.1"
-                                   SpinButtonPlacementMode="Compact"
-                                   AutomationProperties.Name="HYSD bond factor value"/>
-                        <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
-                                   TextWrapping="Wrap"
-                                   Text="Plain-bar τbd from Table 21; for Fe415/Fe500/Fe550 multiply by this factor (Cl. 26.2.1.1)."/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <StackPanel Spacing="4">
-                <TextBlock Text="Hooks &amp; bends (IS 2502)" Style="{StaticResource SectionHeaderStyle}"/>
-                <Border Style="{StaticResource FluentCardStyle}">
-                    <StackPanel Spacing="{StaticResource SpacingS}">
-                        <TextBox x:Name="HookBox"
-                                 Header="Hook cutting allowances (angle:×φ)"
-                                 PlaceholderText="90:9, 135:10, 180:16"
-                                 AutomationProperties.Name="Hook allowances"/>
-                        <TextBox x:Name="BendBox"
-                                 Header="Bend deductions (angle:×φ)"
-                                 PlaceholderText="45:1, 90:2, 135:3"
-                                 AutomationProperties.Name="Bend deductions"/>
-                        <NumberBox x:Name="MinHookBox"
-                                   Header="Minimum hook length (mm)"
-                                   Minimum="0" SmallChange="5"
-                                   SpinButtonPlacementMode="Compact"
-                                   AutomationProperties.Name="Minimum hook length"/>
-                        <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
-                                   TextWrapping="Wrap"
-                                   Text="Closed stirrup: 2(a+b) + 2×hook − bend deductions. Hook length floored at minimum (typically 75 mm)."/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <StackPanel Spacing="4">
-                <TextBlock Text="Civil yields (IS 1200 take-off)" Style="{StaticResource SectionHeaderStyle}"/>
-                <Border Style="{StaticResource FluentCardStyle}">
-                    <StackPanel Spacing="{StaticResource SpacingS}">
-                        <NumberBox x:Name="BricksM3Box" Header="Bricks per m³ (230 mm wall)"
-                                   Minimum="1" Maximum="2000" SmallChange="10"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <NumberBox x:Name="BricksM2Box" Header="Bricks per m² (110 mm wall)"
-                                   Minimum="1" Maximum="500" SmallChange="1"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <NumberBox x:Name="MortarFracBox" Header="Mortar fraction of brickwork"
-                                   Minimum="0.05" Maximum="0.6" SmallChange="0.01"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <NumberBox x:Name="DryFactorBox" Header="Mortar dry volume factor"
-                                   Minimum="1" Maximum="2" SmallChange="0.01"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <NumberBox x:Name="WastageBox" Header="Unit wastage factor (e.g. 1.05)"
-                                   Minimum="1" Maximum="1.5" SmallChange="0.01"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <NumberBox x:Name="ShutterWasteBox" Header="Shuttering wastage factor"
-                                   Minimum="1" Maximum="1.5" SmallChange="0.01"
-                                   SpinButtonPlacementMode="Compact"
-                                   ToolTipService.ToolTip="Applied to formwork m² auto-calculated from RCC"/>
-                        <NumberBox x:Name="IgnoreOpenBox" Header="IS1200 ignore openings below (m²)"
-                                   Minimum="0" Maximum="1" SmallChange="0.05"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <ToggleSwitch x:Name="BeamSlabDeductToggle"
-                                      Header="Beam–slab interface deduct"
-                                      OnContent="Beam sides only (omit soffit)"
-                                      OffContent="Beam soffit + sides"
-                                      AutomationProperties.Name="Beam slab interface deduct"/>
-                        <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
-                                   TextWrapping="Wrap"
-                                   Text="Formwork m² is calculated from RCC members (not typed). When beam–slab deduct is on, beam soffit is omitted (assumes slab formwork). Wastage covers cutting/reuse."/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <StackPanel Spacing="4">
-                <TextBlock Text="Covers &amp; laps (IS 456 defaults)" Style="{StaticResource SectionHeaderStyle}"/>
-                <Border Style="{StaticResource FluentCardStyle}">
-                    <StackPanel Spacing="{StaticResource SpacingS}">
-                        <NumberBox x:Name="CoverColBox" Header="Column cover (mm)"
-                                   Minimum="15" Maximum="75" SmallChange="5"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <NumberBox x:Name="CoverBeamBox" Header="Beam / lintel cover (mm)"
-                                   Minimum="15" Maximum="50" SmallChange="5"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <NumberBox x:Name="CoverSlabBox" Header="Slab / stair cover (mm)"
-                                   Minimum="15" Maximum="40" SmallChange="5"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <NumberBox x:Name="CoverFootBox" Header="Footing / wall cover (mm)"
-                                   Minimum="40" Maximum="75" SmallChange="5"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <NumberBox x:Name="CoverPedBox" Header="Pedestal cover (mm)"
-                                   Minimum="40" Maximum="75" SmallChange="5"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <NumberBox x:Name="CoverLintBox" Header="Lintel cover (mm)"
-                                   Minimum="15" Maximum="40" SmallChange="5"
-                                   SpinButtonPlacementMode="Compact"/>
-                        <ComboBox x:Name="ColLapBox" Header="Default column compression lap"
-                                  MinWidth="160">
-                            <x:String>No</x:String>
-                            <x:String>Yes</x:String>
-                        </ComboBox>
-                        <ComboBox x:Name="BeamLapBox" Header="Default beam tension lap"
-                                  MinWidth="160">
-                            <x:String>None</x:String>
-                            <x:String>Tension</x:String>
-                        </ComboBox>
-                        <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
-                                   TextWrapping="Wrap"
-                                   Text="Applied to new rows and stamped before Generate. Clear column height always comes from Levels."/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <Button Content="Save" Style="{StaticResource PrimaryButtonStyle}"
-                    Click="Save_Click" HorizontalAlignment="Left"
-                    AutomationProperties.Name="Save settings"/>
+        <StackPanel Spacing="2">
+            <TextBlock Text="Settings" Style="{StaticResource PageTitleStyle}"/>
+            <TextBlock Style="{StaticResource PageSubtitleStyle}"
+                       Text="Project identity for reports, plus IS 456 / IS 2502 engineering defaults."/>
         </StackPanel>
-    </ScrollViewer>
+
+        <Pivot Grid.Row="1" x:Name="SettingsPivot">
+            <PivotItem Header="Project">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,8,0,0">
+                    <StackPanel Spacing="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Project" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <TextBox x:Name="ProjectNameBox"
+                                             Header="Project name"
+                                             PlaceholderText="e.g. Residential block A"
+                                             AutomationProperties.Name="Project name"/>
+                                    <TextBox x:Name="ProjectLocationBox"
+                                             Header="Project location"
+                                             PlaceholderText="Site / city"
+                                             AutomationProperties.Name="Project location"/>
+                                    <TextBox x:Name="ClientNameBox"
+                                             Header="Client name"
+                                             PlaceholderText="Owner / client"
+                                             AutomationProperties.Name="Client name"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Prepared by" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <ComboBox x:Name="PreparedByRoleBox"
+                                              Header="Role"
+                                              MinWidth="200"
+                                              AutomationProperties.Name="Prepared by role">
+                                        <x:String>Engineer</x:String>
+                                        <x:String>Architect</x:String>
+                                        <x:String>PMC</x:String>
+                                    </ComboBox>
+                                    <TextBox x:Name="PreparedByNameBox"
+                                             Header="Name"
+                                             PlaceholderText="Engineer / architect / PMC name"
+                                             AutomationProperties.Name="Prepared by name"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Company" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <TextBox x:Name="CompanyNameBox"
+                                             Header="Company name"
+                                             PlaceholderText="Consulting / PMC firm"
+                                             AutomationProperties.Name="Company name"/>
+                                    <TextBox x:Name="ContactPhoneBox"
+                                             Header="Contact number"
+                                             PlaceholderText="+91 …"
+                                             AutomationProperties.Name="Contact number"/>
+                                    <TextBox x:Name="ContactEmailBox"
+                                             Header="Email"
+                                             PlaceholderText="name@company.com"
+                                             InputScope="EmailSmtpAddress"
+                                             AutomationProperties.Name="Contact email"/>
+                                    <TextBox x:Name="AddressBox"
+                                             Header="Address"
+                                             PlaceholderText="Office / correspondence address"
+                                             AcceptsReturn="True"
+                                             TextWrapping="Wrap"
+                                             MinHeight="72"
+                                             AutomationProperties.Name="Company address"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Logo" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Width="88" Height="88"
+                                                CornerRadius="4"
+                                                Background="White"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1">
+                                            <Image x:Name="LogoPreview"
+                                                   Stretch="Uniform"
+                                                   Margin="6"
+                                                   AutomationProperties.Name="Project logo preview"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+                                            <TextBlock x:Name="LogoPathText"
+                                                       Style="{StaticResource CaptionSecondaryStyle}"
+                                                       TextWrapping="Wrap"
+                                                       Text="No logo selected"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <Button Content="Browse…" Click="BrowseLogo_Click"
+                                                        AutomationProperties.Name="Browse project logo"/>
+                                                <Button Content="Clear" Click="ClearLogo_Click"
+                                                        AutomationProperties.Name="Clear project logo"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                               TextWrapping="Wrap"
+                                               Text="PNG or JPG. Shown on PDF report headers. A copy is kept under Local App Data."/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </PivotItem>
+
+            <PivotItem Header="Engineering">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,8,0,0">
+                    <StackPanel Spacing="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Bar diameters" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <TextBox x:Name="DiaBox"
+                                         Header="Available bar diameters (mm)"
+                                         PlaceholderText="8, 10, 12, 16, 20, 25…"
+                                         AutomationProperties.Name="Available bar diameters"/>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Development length (IS 456 Cl. 26.2.1)" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <ToggleSwitch x:Name="HysdBondToggle"
+                                                  Header="HYSD / deformed bond (τbd × 1.6)"
+                                                  OnContent="On" OffContent="Off"
+                                                  AutomationProperties.Name="HYSD bond factor"/>
+                                    <NumberBox x:Name="HysdFactorBox"
+                                               Header="Bond factor (default 1.6)"
+                                               Minimum="1" Maximum="2" SmallChange="0.1"
+                                               SpinButtonPlacementMode="Compact"
+                                               AutomationProperties.Name="HYSD bond factor value"/>
+                                    <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                               TextWrapping="Wrap"
+                                               Text="Plain-bar τbd from Table 21; for Fe415/Fe500/Fe550 multiply by this factor (Cl. 26.2.1.1)."/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Hooks &amp; bends (IS 2502)" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <TextBox x:Name="HookBox"
+                                             Header="Hook cutting allowances (angle:×φ)"
+                                             PlaceholderText="90:9, 135:10, 180:16"
+                                             AutomationProperties.Name="Hook allowances"/>
+                                    <TextBox x:Name="BendBox"
+                                             Header="Bend deductions (angle:×φ)"
+                                             PlaceholderText="45:1, 90:2, 135:3"
+                                             AutomationProperties.Name="Bend deductions"/>
+                                    <NumberBox x:Name="MinHookBox"
+                                               Header="Minimum hook length (mm)"
+                                               Minimum="0" SmallChange="5"
+                                               SpinButtonPlacementMode="Compact"
+                                               AutomationProperties.Name="Minimum hook length"/>
+                                    <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                               TextWrapping="Wrap"
+                                               Text="Closed stirrup: 2(a+b) + 2×hook − bend deductions. Hook length floored at minimum (typically 75 mm)."/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Civil yields (IS 1200 take-off)" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <NumberBox x:Name="BricksM3Box" Header="Bricks per m³ (230 mm wall)"
+                                               Minimum="1" Maximum="2000" SmallChange="10"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <NumberBox x:Name="BricksM2Box" Header="Bricks per m² (110 mm wall)"
+                                               Minimum="1" Maximum="500" SmallChange="1"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <NumberBox x:Name="MortarFracBox" Header="Mortar fraction of brickwork"
+                                               Minimum="0.05" Maximum="0.6" SmallChange="0.01"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <NumberBox x:Name="DryFactorBox" Header="Mortar dry volume factor"
+                                               Minimum="1" Maximum="2" SmallChange="0.01"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <NumberBox x:Name="WastageBox" Header="Unit wastage factor (e.g. 1.05)"
+                                               Minimum="1" Maximum="1.5" SmallChange="0.01"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <NumberBox x:Name="ShutterWasteBox" Header="Shuttering wastage factor"
+                                               Minimum="1" Maximum="1.5" SmallChange="0.01"
+                                               SpinButtonPlacementMode="Compact"
+                                               ToolTipService.ToolTip="Applied to formwork m² auto-calculated from RCC"/>
+                                    <NumberBox x:Name="IgnoreOpenBox" Header="IS1200 ignore openings below (m²)"
+                                               Minimum="0" Maximum="1" SmallChange="0.05"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <ToggleSwitch x:Name="BeamSlabDeductToggle"
+                                                  Header="Beam–slab interface deduct"
+                                                  OnContent="Beam sides only (omit soffit)"
+                                                  OffContent="Beam soffit + sides"
+                                                  AutomationProperties.Name="Beam slab interface deduct"/>
+                                    <NumberBox x:Name="WallFacesBox" Header="Default wall plaster faces"
+                                               Minimum="1" Maximum="2" SmallChange="1"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <NumberBox x:Name="ColSidesBox" Header="Default column sides exposed (0–4)"
+                                               Minimum="0" Maximum="4" SmallChange="1"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <ToggleSwitch x:Name="PlasterCeilingToggle"
+                                                  Header="Default plaster slab ceiling"
+                                                  OffContent="No" OnContent="Yes"/>
+                                    <ToggleSwitch x:Name="BeamSoffitToggle"
+                                                  Header="Default plaster beam soffit"
+                                                  OffContent="No" OnContent="Yes"/>
+                                    <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                               TextWrapping="Wrap"
+                                               Text="Formwork from RCC. Plaster/paint: Reconcile on Plastering (wall both faces + column/beam/slab exposure), then Finalize."/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Covers &amp; laps (IS 456 defaults)" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <NumberBox x:Name="CoverColBox" Header="Column cover (mm)"
+                                               Minimum="15" Maximum="75" SmallChange="5"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <NumberBox x:Name="CoverBeamBox" Header="Beam / lintel cover (mm)"
+                                               Minimum="15" Maximum="50" SmallChange="5"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <NumberBox x:Name="CoverSlabBox" Header="Slab / stair cover (mm)"
+                                               Minimum="15" Maximum="40" SmallChange="5"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <NumberBox x:Name="CoverFootBox" Header="Footing / wall cover (mm)"
+                                               Minimum="40" Maximum="75" SmallChange="5"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <NumberBox x:Name="CoverPedBox" Header="Pedestal cover (mm)"
+                                               Minimum="40" Maximum="75" SmallChange="5"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <NumberBox x:Name="CoverLintBox" Header="Lintel cover (mm)"
+                                               Minimum="15" Maximum="40" SmallChange="5"
+                                               SpinButtonPlacementMode="Compact"/>
+                                    <ComboBox x:Name="ColLapBox" Header="Default column compression lap"
+                                              MinWidth="160">
+                                        <x:String>No</x:String>
+                                        <x:String>Yes</x:String>
+                                    </ComboBox>
+                                    <ComboBox x:Name="BeamLapBox" Header="Default beam tension lap"
+                                              MinWidth="160">
+                                        <x:String>None</x:String>
+                                        <x:String>Tension</x:String>
+                                    </ComboBox>
+                                    <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                               TextWrapping="Wrap"
+                                               Text="Applied to new rows and stamped before Generate. Clear column height always comes from Levels."/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </PivotItem>
+
+            <PivotItem Header="Cost %">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,8,0,0">
+                    <StackPanel Spacing="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Estimate percentages" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <NumberBox x:Name="ElectricalPctBox"
+                                               Header="Electrical (% of base)"
+                                               Minimum="0" Maximum="100" SmallChange="0.5"
+                                               SpinButtonPlacementMode="Compact"
+                                               AutomationProperties.Name="Electrical percentage"/>
+                                    <NumberBox x:Name="PlumbingPctBox"
+                                               Header="Plumbing (% of base)"
+                                               Minimum="0" Maximum="100" SmallChange="0.5"
+                                               SpinButtonPlacementMode="Compact"
+                                               AutomationProperties.Name="Plumbing percentage"/>
+                                    <NumberBox x:Name="EscalationPctBox"
+                                               Header="Escalation (% of base + electrical + plumbing)"
+                                               Minimum="0" Maximum="100" SmallChange="0.5"
+                                               SpinButtonPlacementMode="Compact"
+                                               AutomationProperties.Name="Escalation percentage"/>
+                                    <NumberBox x:Name="ConsultingPctBox"
+                                               Header="Consulting / PMC fees (% after escalation)"
+                                               Minimum="0" Maximum="100" SmallChange="0.5"
+                                               SpinButtonPlacementMode="Compact"
+                                               AutomationProperties.Name="Consulting fee percentage"/>
+                                    <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                               TextWrapping="Wrap"
+                                               Text="Applied on Estimate → Calculate. Order: Base (civil+materials+steel) → Electrical → Plumbing → Escalation → Consulting fees = Grand total."/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </PivotItem>
+        </Pivot>
+
+        <Button Grid.Row="2" Content="Save" Style="{StaticResource PrimaryButtonStyle}"
+                Click="Save_Click" HorizontalAlignment="Left"
+                AutomationProperties.Name="Save settings"/>
+    </Grid>
 </Page>

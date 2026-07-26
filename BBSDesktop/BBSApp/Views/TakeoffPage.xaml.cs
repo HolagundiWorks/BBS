@@ -1333,6 +1333,7 @@ public sealed partial class TakeoffPage : Page
         UpdateModeStatus();
         SelectItem(item);
         SelectUtilTool("Draw");
+        Notify("Opening drawn", "Commit to create Door/Window schedule + masonry wall deduct (nearest wall suggested).", InfoBarSeverity.Informational);
     }
 
     private void SelectNearest(Point p)
@@ -1366,7 +1367,7 @@ public sealed partial class TakeoffPage : Page
             SelectItem(row.Item);
     }
 
-    private void Commit_Click(object sender, RoutedEventArgs e)
+    private async void Commit_Click(object sender, RoutedEventArgs e)
     {
         var item = _selected ?? (ItemList.SelectedItem as TakeoffListRow)?.Item;
         if (item is null)
@@ -1384,11 +1385,13 @@ public sealed partial class TakeoffPage : Page
             Notify("Already committed");
             return;
         }
+
         if (item.Tool.Equals("Opening", StringComparison.OrdinalIgnoreCase))
         {
-            Notify("Opening overlay",
-                "Openings are stored on the takeoff item fields — edit the wall/plaster row after commit, or merge openings manually.");
+            await CommitOpeningAsync(item);
+            return;
         }
+
         var coll = TakeoffState.CollectionFor(ProjectStore.Current, item.Category);
         if (coll is null)
         {
@@ -1419,6 +1422,78 @@ public sealed partial class TakeoffPage : Page
         CanvasHost.Redraw(State.Items);
         Notify("Committed", $"{item.Mark} → {item.Category} BOQ.", InfoBarSeverity.Success);
         UpdateModeStatus();
+    }
+
+    private async System.Threading.Tasks.Task CommitOpeningAsync(TakeoffItem item)
+    {
+        var store = ProjectStore.Current;
+        var suggestKind = OpeningScheduleLinker.SuggestKind(item);
+        var suggestWall = OpeningScheduleLinker.SuggestWallMark(store, item);
+        var walls = OpeningScheduleLinker.WallMarkChoices(store, item.Level).ToList();
+        if (walls.Count == 0) walls.Add(suggestWall);
+
+        var kindBox = new ComboBox { Header = "Create as", HorizontalAlignment = HorizontalAlignment.Stretch };
+        kindBox.Items.Add(new ComboBoxItem { Content = "Door (schedule + wall deduct)", Tag = OpeningScheduleLinker.ScheduleKind.Door });
+        kindBox.Items.Add(new ComboBoxItem { Content = "Window (schedule + wall deduct)", Tag = OpeningScheduleLinker.ScheduleKind.Window });
+        kindBox.Items.Add(new ComboBoxItem { Content = "Deduct only (no door/window)", Tag = OpeningScheduleLinker.ScheduleKind.DeductOnly });
+        kindBox.SelectedIndex = suggestKind switch
+        {
+            OpeningScheduleLinker.ScheduleKind.Door => 0,
+            OpeningScheduleLinker.ScheduleKind.Window => 1,
+            _ => 2
+        };
+
+        var wallBox = new ComboBox { Header = "Wall mark", HorizontalAlignment = HorizontalAlignment.Stretch };
+        foreach (var m in walls)
+            wallBox.Items.Add(m);
+        wallBox.SelectedItem = walls.Contains(suggestWall, StringComparer.OrdinalIgnoreCase)
+            ? walls.First(x => x.Equals(suggestWall, StringComparison.OrdinalIgnoreCase))
+            : walls[0];
+
+        double w = 0, h = 0;
+        item.Fields.TryGetValue("opening_l", out var wl);
+        item.Fields.TryGetValue("opening_h", out var hl);
+        double.TryParse(wl, NumberStyles.Float, CultureInfo.InvariantCulture, out w);
+        double.TryParse(hl, NumberStyles.Float, CultureInfo.InvariantCulture, out h);
+
+        var panel = new StackPanel { Spacing = 10 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"Opening {w:0} × {h:0} mm — links to masonry deduct and optional Door/Window schedule.",
+            TextWrapping = TextWrapping.Wrap
+        });
+        panel.Children.Add(kindBox);
+        panel.Children.Add(wallBox);
+
+        var dlg = new ContentDialog
+        {
+            Title = "Commit opening",
+            Content = panel,
+            PrimaryButtonText = "Commit",
+            CloseButtonText = "Cancel",
+            XamlRoot = XamlRoot,
+            DefaultButton = ContentDialogButton.Primary
+        };
+        if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
+
+        var kind = OpeningScheduleLinker.ScheduleKind.Window;
+        if (kindBox.SelectedItem is ComboBoxItem { Tag: OpeningScheduleLinker.ScheduleKind k })
+            kind = k;
+        string wallMark = wallBox.SelectedItem?.ToString() ?? suggestWall;
+
+        try
+        {
+            var result = OpeningScheduleLinker.Commit(store, item, kind, wallMark);
+            store.Notify();
+            foreach (var r in _rows) r.Refresh();
+            CanvasHost.Redraw(State.Items);
+            Notify("Committed", result.Message, InfoBarSeverity.Success);
+            UpdateModeStatus();
+        }
+        catch (Exception ex)
+        {
+            Notify("Commit failed", ex.Message, InfoBarSeverity.Error);
+        }
     }
 
     private void Delete_Click(object sender, RoutedEventArgs e)

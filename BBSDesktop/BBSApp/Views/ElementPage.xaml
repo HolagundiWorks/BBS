@@ -29,8 +29,8 @@
 
         <InfoBar x:Name="ErrorBar" Grid.Row="1" IsOpen="False"/>
 
-        <Pivot x:Name="MainPivot" Grid.Row="2">
-            <PivotItem Header="Entry">
+        <Pivot x:Name="MainPivot" Grid.Row="2" SelectionChanged="MainPivot_SelectionChanged">
+            <PivotItem x:Name="EntryPivotItem" Header="Entry">
                 <Grid Padding="0,10,0,0" RowSpacing="10" ColumnSpacing="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -50,7 +50,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <TextBlock Text="Sheet" Style="{StaticResource SectionHeaderStyle}" Margin="0"
+                            <TextBlock x:Name="SheetTitleText" Text="Sheet" Style="{StaticResource SectionHeaderStyle}" Margin="0"
                                        VerticalAlignment="Center"/>
                             <ComboBox x:Name="FloorCombo" MinWidth="140"
                                       PlaceholderText="Floor"
@@ -84,11 +84,15 @@
                                     Style="{StaticResource PrimaryButtonStyle}"
                                     Click="RefreshComputed_Click" Visibility="Collapsed"
                                     ToolTipService.ToolTip="Recalculate formwork from concrete members"/>
+                            <Button x:Name="FinalizeFinishBtn" Content="Finalize finishes"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Click="FinalizeFinish_Click" Visibility="Collapsed"
+                                    ToolTipService.ToolTip="Write included areas to Plaster + Painting for BOQ"/>
                         </StackPanel>
                     </Grid>
 
                     <!-- Excel-style sheet: light theme + full grid borders -->
-                    <Border Grid.Row="1" Padding="0"
+                    <Border x:Name="SheetBorder" Grid.Row="1" Padding="0"
                             Background="#FFFFFF"
                             BorderBrush="#B4B4B4"
                             BorderThickness="1"
@@ -122,8 +126,8 @@
                         </ScrollViewer>
                     </Border>
 
-                    <!-- Section sketch -->
-                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
+                    <!-- Section sketch (RCC only) -->
+                    <StackPanel x:Name="SketchPanel" Grid.Row="1" Grid.Column="1" Spacing="4">
                         <TextBlock Text="Section sketch" Style="{StaticResource MetaTextStyle}" Margin="0,0,0,2"/>
                         <Border Style="{StaticResource FluentCardStyle}" Padding="10,8"
                                 VerticalAlignment="Top">
@@ -159,6 +163,72 @@
                             </StackPanel>
                         </Grid>
                     </Expander>
+                </Grid>
+            </PivotItem>
+
+            <PivotItem x:Name="DeductionsPivotItem" Header="Deductions" Visibility="Collapsed">
+                <Grid Padding="0,10,0,0" RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="One opening type per line · same wall can appear again · Nos = identical openings"
+                                   Style="{StaticResource MetaTextStyle}" VerticalAlignment="Center"
+                                   TextWrapping="Wrap"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <Button Content="Add opening" Style="{StaticResource PrimaryButtonStyle}"
+                                    Click="AddOpening_Click"
+                                    ToolTipService.ToolTip="Add another opening line (pick wall mark)"/>
+                            <Button Content="Delete line" Style="{StaticResource SecondaryButtonStyle}"
+                                    Click="DeleteOpening_Click"
+                                    ToolTipService.ToolTip="Delete selected opening line"/>
+                        </StackPanel>
+                    </Grid>
+                    <Border Grid.Row="1" Padding="0"
+                            Background="#FFFFFF"
+                            BorderBrush="#B4B4B4"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            RequestedTheme="Light">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      HorizontalScrollMode="Enabled"
+                                      VerticalScrollMode="Disabled">
+                            <Grid Background="#FFFFFF">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <Border BorderBrush="#B4B4B4" BorderThickness="0,0,0,1" Background="#F2F2F2">
+                                    <Grid x:Name="DeductSheetHeader"/>
+                                </Border>
+                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                              VerticalScrollMode="Enabled"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel x:Name="DeductSheetRowsHost" Background="#FFFFFF"/>
+                                </ScrollViewer>
+                            </Grid>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+            </PivotItem>
+
+            <PivotItem x:Name="FinalPivotItem" Header="Final" Visibility="Collapsed">
+                <Grid Padding="0,10,0,0" RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="FinalSummaryText" Style="{StaticResource MetaTextStyle}"
+                               Text="Finalize writes included reconcile lines to Plaster. Painting qty is taken from plaster."/>
+                    <Border Grid.Row="1" Style="{StaticResource FluentCardStyle}" Padding="4">
+                        <Border x:Name="FinalTableHost"/>
+                    </Border>
                 </Grid>
             </PivotItem>
 
