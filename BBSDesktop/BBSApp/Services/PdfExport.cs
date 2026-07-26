@@ -12,12 +12,20 @@ public static class PdfExport
         QuestPDF.Settings.License = LicenseType.Community;
     }
 
-    public static bool ExportProjectReport(string path, ProjectStore store, out string? error)
+    public static bool ExportProjectReport(
+        string path,
+        ProjectStore store,
+        out string? error,
+        AnnotatedDrawing? annotatedDrawing = null)
     {
         error = null;
         try
         {
             var sections = BuildReportSections(store);
+            bool hasSteel = store.Columns.Count + store.Pedestals.Count + store.Beams.Count + store.Lintels.Count > 0;
+            bool hasDrawing = annotatedDrawing is not null
+                              || !string.IsNullOrWhiteSpace(store.Takeoff.PdfPath);
+
             Document.Create(container =>
             {
                 container.Page(page =>
@@ -32,7 +40,7 @@ public static class PdfExport
                     page.Content().Column(col =>
                     {
                         col.Spacing(14);
-                        if (sections.Count == 0)
+                        if (sections.Count == 0 && !hasDrawing)
                         {
                             col.Item().Text("No element data in this project. Add RCC or civil BOQ items, then export again.");
                             return;
@@ -41,11 +49,16 @@ public static class PdfExport
                         foreach (var sec in sections)
                             col.Item().Element(c => SectionBlock(c, sec));
 
-                        var civilLines = CivilBoqCalculator.BuildAll(store);
-                        if (civilLines.Count > 0)
+                        if (hasSteel)
                         {
                             col.Item().PageBreak();
-                            col.Item().Element(c => SketchPdf.DrawCivilBoqSketches(c, civilLines));
+                            col.Item().Element(c => SketchPdf.DrawSteelArrangementSketches(c, store));
+                        }
+
+                        if (hasDrawing)
+                        {
+                            col.Item().PageBreak();
+                            col.Item().Element(c => TakeoffAnnotatedPdf.Draw(c, store, annotatedDrawing));
                         }
                     });
                 });
@@ -159,7 +172,8 @@ public static class PdfExport
         ProjectStore store,
         EstimateResult result,
         IReadOnlySet<string> levels,
-        out string? error)
+        out string? error,
+        AnnotatedDrawing? annotatedDrawing = null)
     {
         error = null;
         try
@@ -169,6 +183,10 @@ public static class PdfExport
                 : levels.Count == store.Levels.Count && store.Levels.Count > 0
                     ? "all storeys"
                     : string.Join(", ", levels.OrderBy(x => x));
+
+            bool hasSteel = store.Columns.Count + store.Pedestals.Count + store.Beams.Count + store.Lintels.Count > 0;
+            bool hasDrawing = annotatedDrawing is not null
+                              || !string.IsNullOrWhiteSpace(store.Takeoff.PdfPath);
 
             Document.Create(container =>
             {
@@ -209,8 +227,17 @@ public static class PdfExport
                         if (result.MissingCodes.Count > 0)
                             col.Item().Text("Missing rates: " + string.Join(", ", result.MissingCodes)).FontColor(Colors.Red.Medium);
 
-                        col.Item().PageBreak();
-                        col.Item().Element(c => SketchPdf.DrawEstimateSketches(c, result.Civil));
+                        if (hasSteel)
+                        {
+                            col.Item().PageBreak();
+                            col.Item().Element(c => SketchPdf.DrawSteelArrangementSketches(c, store));
+                        }
+
+                        if (hasDrawing)
+                        {
+                            col.Item().PageBreak();
+                            col.Item().Element(c => TakeoffAnnotatedPdf.Draw(c, store, annotatedDrawing));
+                        }
                     });
                 });
             }).GeneratePdf(path);

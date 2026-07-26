@@ -149,6 +149,10 @@ public sealed partial class ElementPage : Page
             _openingRows = ProjectStore.Current.MasonryOpenings;
             BuildDeductSheetHeader();
         }
+        else
+        {
+            DeductionsPivotItem.Visibility = Visibility.Collapsed;
+        }
         if (spec.IsComputedFromRcc)
             ApplyComputedFromRccMode();
         if (spec.IsFinishReconcile)

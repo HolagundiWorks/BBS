@@ -22,10 +22,13 @@ public sealed partial class ReportPage : Page
         var file = await picker.PickSaveFileAsync();
         if (file is null) return;
 
-        if (PdfExport.ExportProjectReport(file.Path, ProjectStore.Current, out var err))
+        var annotated = await TakeoffAnnotatedPdf.TryCaptureAsync(ProjectStore.Current);
+        if (PdfExport.ExportProjectReport(file.Path, ProjectStore.Current, out var err, annotated))
         {
             Info.Title = "PDF";
-            Info.Message = "Report saved.";
+            Info.Message = annotated is null
+                ? "Report saved."
+                : "Report saved (includes annotated drawing).";
             Info.Severity = InfoBarSeverity.Success;
         }
         else
