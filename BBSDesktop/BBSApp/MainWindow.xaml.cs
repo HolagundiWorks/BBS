@@ -70,7 +70,8 @@ public sealed partial class MainWindow : Window
             VirtualKey.Number3 or VirtualKey.NumberPad3 => "civil",
             VirtualKey.Number4 or VirtualKey.NumberPad4 => "schedule",
             VirtualKey.Number5 or VirtualKey.NumberPad5 => "office",
-            VirtualKey.Number6 or VirtualKey.NumberPad6 => "outputs",
+            VirtualKey.Number6 or VirtualKey.NumberPad6 => "contracts",
+            VirtualKey.Number7 or VirtualKey.NumberPad7 => "outputs",
             _ => null
         };
         if (tab is null) return;
@@ -128,6 +129,12 @@ public sealed partial class MainWindow : Window
         _tabs.Add(new RibbonTab("office", "Office", new[]
         {
             Cmd("correspondence", "Correspondence", Glyph("")),
+        }));
+        _tabs.Add(new RibbonTab("contracts", "Contracts", new[]
+        {
+            Cmd("contracts_list", "Contracts", Glyph("")),
+            Cmd("contracts_rates", "Rate schedule", Glyph("")),
+            Cmd("contracts_terms", "Terms", Glyph("")),
         }));
         _tabs.Add(new RibbonTab("outputs", "Outputs", new[]
         {
@@ -426,6 +433,9 @@ public sealed partial class MainWindow : Window
             "schedule_network" => new SchedulePage(SchedulePage.ScheduleTab.Network),
             "schedule_gantt" => new SchedulePage(SchedulePage.ScheduleTab.Gantt),
             "office" or "correspondence" => new CorrespondencePage(),
+            "contracts" or "contracts_list" => new ContractsPage(ContractsPage.ContractsTab.Contracts),
+            "contracts_rates" => new ContractsPage(ContractsPage.ContractsTab.Rates),
+            "contracts_terms" => new ContractsPage(ContractsPage.ContractsTab.Terms),
             "quantities" => new QuantitiesPage(),
             "po" => new PurchaseOrderPage(),
             "estimate" => new EstimatePage(),

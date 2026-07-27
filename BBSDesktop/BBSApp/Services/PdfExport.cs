@@ -415,6 +415,100 @@ public static class PdfExport
         }
     }
 
+    public static bool ExportContract(string path, ProjectStore store, Contract c, out string? error)
+    {
+        error = null;
+        try
+        {
+            var info = store.Info;
+            string number = string.IsNullOrWhiteSpace(c.Number)
+                ? store.ContractBook.PreviewNumber(c, info.CompanyDisplay) + "  (draft)"
+                : c.Number;
+            string kind = Contract.KindDisplay(c.Kind);
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(36);
+                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily(Fonts.Calibri));
+                    page.Header().Element(cc => ReportHeader(cc, store, kind));
+                    page.Footer().Element(cc => ReportFooter(cc, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(6);
+                        col.Item().Row(r =>
+                        {
+                            r.RelativeItem().Text(t => { t.Span("No: ").SemiBold(); t.Span(number); });
+                            r.RelativeItem().AlignRight().Text(t => { t.Span("Award date: ").SemiBold(); t.Span(c.AwardDate.ToString("dd MMM yyyy")); });
+                        });
+                        col.Item().Text(t => { t.Span("Completion by: ").SemiBold(); t.Span(c.CompletionDate.ToString("dd MMM yyyy")); });
+                        if (!string.IsNullOrWhiteSpace(c.Title))
+                            col.Item().PaddingTop(4).Text(c.Title).SemiBold().FontSize(12);
+
+                        col.Item().PaddingTop(6).Text("To (Contractor):").SemiBold();
+                        col.Item().Text(string.IsNullOrWhiteSpace(c.ContractorName) ? "—" : c.ContractorName);
+                        foreach (var line in SplitLines(c.ContractorAddress)) if (line.Length > 0) col.Item().Text(line);
+
+                        if (!string.IsNullOrWhiteSpace(c.Scope))
+                        {
+                            col.Item().PaddingTop(6).Text("Scope of work:").SemiBold();
+                            foreach (var line in SplitLines(c.Scope)) col.Item().Text(line.Length == 0 ? " " : line);
+                        }
+
+                        if (c.IsItemRate && c.Lines.Count > 0)
+                        {
+                            var headers = new[] { "#", "Description", "Unit", "Qty", "Rate", "Amount" };
+                            var rows = new List<string[]>();
+                            int i = 1;
+                            foreach (var l in c.Lines)
+                                rows.Add(new[] { (i++).ToString(), l.Description, l.Unit,
+                                    l.Qty.ToString("0.##"), l.Rate.ToString("0.##"), l.Amount.ToString("0.##") });
+                            col.Item().PaddingTop(8).Element(cc => TableSection(cc, "Schedule of quantities & rates", headers, rows));
+                            col.Item().AlignRight().Text(t => { t.Span("Contract value: ").SemiBold(); t.Span("Rs. " + c.Value.ToString("N2")); });
+                        }
+                        else
+                        {
+                            col.Item().PaddingTop(8).Text(t => { t.Span("Contract value (lump sum): ").SemiBold(); t.Span("Rs. " + c.Value.ToString("N2")); });
+                        }
+                        col.Item().Text(t => { t.Span("Retention: ").SemiBold(); t.Span(c.RetentionPct.ToString("0.#") + " %"); });
+
+                        if (c.Terms.Count > 0)
+                        {
+                            col.Item().PaddingTop(8).Text("Terms & conditions:").SemiBold();
+                            int n = 1;
+                            foreach (var term in c.Terms)
+                                col.Item().Text($"{n++}. {term}").LineHeight(1.3f);
+                        }
+
+                        col.Item().PaddingTop(30).Row(r =>
+                        {
+                            r.RelativeItem().Column(cc =>
+                            {
+                                cc.Item().Text("For " + info.CompanyDisplay).SemiBold();
+                                cc.Item().Height(30);
+                                cc.Item().Text("Authorised signatory").FontSize(9).FontColor(Colors.Grey.Darken2);
+                            });
+                            r.RelativeItem().AlignRight().Column(cc =>
+                            {
+                                cc.Item().Text("Accepted — " + (string.IsNullOrWhiteSpace(c.ContractorName) ? "Contractor" : c.ContractorName)).SemiBold();
+                                cc.Item().Height(30);
+                                cc.Item().Text("Contractor signature").FontSize(9).FontColor(Colors.Grey.Darken2);
+                            });
+                        });
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
     private static IEnumerable<string> SplitLines(string? s) =>
         (s ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
