@@ -71,7 +71,8 @@ public sealed partial class MainWindow : Window
             VirtualKey.Number4 or VirtualKey.NumberPad4 => "schedule",
             VirtualKey.Number5 or VirtualKey.NumberPad5 => "office",
             VirtualKey.Number6 or VirtualKey.NumberPad6 => "contracts",
-            VirtualKey.Number7 or VirtualKey.NumberPad7 => "outputs",
+            VirtualKey.Number7 or VirtualKey.NumberPad7 => "accounts",
+            VirtualKey.Number8 or VirtualKey.NumberPad8 => "outputs",
             _ => null
         };
         if (tab is null) return;
@@ -135,6 +136,12 @@ public sealed partial class MainWindow : Window
             Cmd("contracts_list", "Contracts", Glyph("")),
             Cmd("contracts_rates", "Rate schedule", Glyph("")),
             Cmd("contracts_terms", "Terms", Glyph("")),
+        }));
+        _tabs.Add(new RibbonTab("accounts", "Accounts", new[]
+        {
+            Cmd("accounts_bills", "Running bills", Glyph("")),
+            Cmd("accounts_cash", "Cash book", Glyph("")),
+            Cmd("accounts_ledger", "Ledger", Glyph("")),
         }));
         _tabs.Add(new RibbonTab("outputs", "Outputs", new[]
         {
@@ -436,6 +443,9 @@ public sealed partial class MainWindow : Window
             "contracts" or "contracts_list" => new ContractsPage(ContractsPage.ContractsTab.Contracts),
             "contracts_rates" => new ContractsPage(ContractsPage.ContractsTab.Rates),
             "contracts_terms" => new ContractsPage(ContractsPage.ContractsTab.Terms),
+            "accounts" or "accounts_bills" => new AccountsPage(AccountsPage.AccountsTab.Bills),
+            "accounts_cash" => new AccountsPage(AccountsPage.AccountsTab.Cash),
+            "accounts_ledger" => new AccountsPage(AccountsPage.AccountsTab.Ledger),
             "quantities" => new QuantitiesPage(),
             "po" => new PurchaseOrderPage(),
             "estimate" => new EstimatePage(),

@@ -509,6 +509,93 @@ public static class PdfExport
         }
     }
 
+    public static bool ExportRunningBill(string path, ProjectStore store, RunningBill b, out string? error)
+    {
+        error = null;
+        try
+        {
+            var info = store.Info;
+            string number = string.IsNullOrWhiteSpace(b.Number)
+                ? store.Accounts.PreviewBillNumber(b, info.CompanyDisplay) + "  (draft)"
+                : b.Number;
+            string raNo = b.BillNo > 0 ? $"RA Bill No. {b.BillNo}" : "RA Bill (draft)";
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(32);
+                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily(Fonts.Calibri));
+                    page.Header().Element(cc => ReportHeader(cc, store, raNo));
+                    page.Footer().Element(cc => ReportFooter(cc, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(6);
+                        col.Item().Row(r =>
+                        {
+                            r.RelativeItem().Text(t => { t.Span("No: ").SemiBold(); t.Span(number); });
+                            r.RelativeItem().AlignRight().Text(t => { t.Span("Date: ").SemiBold(); t.Span(b.Date.ToString("dd MMM yyyy")); });
+                        });
+                        if (!string.IsNullOrWhiteSpace(b.ContractLabel))
+                            col.Item().Text(t => { t.Span("Against: ").SemiBold(); t.Span(b.ContractLabel); });
+                        if (!string.IsNullOrWhiteSpace(b.Party))
+                            col.Item().Text(t => { t.Span("Contractor: ").SemiBold(); t.Span(b.Party); });
+
+                        var headers = new[] { "#", "Description", "Unit", "Rate", "Qty", "Amount" };
+                        var rows = new List<string[]>();
+                        int i = 1;
+                        foreach (var l in b.Lines)
+                            rows.Add(new[] { (i++).ToString(), l.Description, l.Unit,
+                                l.Rate.ToString("0.##"), l.Qty.ToString("0.###"), l.Amount.ToString("0.##") });
+                        col.Item().PaddingTop(6).Element(cc => TableSection(cc, "Measured work", headers, rows));
+
+                        col.Item().PaddingTop(6).AlignRight().Column(c =>
+                        {
+                            void Line(string label, double val, bool strong = false)
+                            {
+                                c.Item().Row(r =>
+                                {
+                                    var lab = r.ConstantItem(220).Text(label);
+                                    var amt = r.ConstantItem(120).AlignRight().Text("Rs. " + val.ToString("N2"));
+                                    if (strong) { lab.SemiBold(); amt.SemiBold(); }
+                                });
+                            }
+                            Line("Gross value of work done", b.Gross);
+                            Line($"Less: Retention @ {b.RetentionPct:0.#}%", -b.Retention);
+                            if (b.OtherDeductions != 0) Line("Less: Other deductions", -b.OtherDeductions);
+                            if (b.AdvanceRecovery != 0) Line("Less: Advance recovery", -b.AdvanceRecovery);
+                            c.Item().PaddingVertical(2).LineHorizontal(1).LineColor(Colors.Grey.Medium);
+                            Line("Net amount payable", b.Net, strong: true);
+                        });
+
+                        col.Item().PaddingTop(30).Row(r =>
+                        {
+                            r.RelativeItem().Column(cc =>
+                            {
+                                cc.Item().Text("Prepared / measured by").FontSize(9).FontColor(Colors.Grey.Darken2);
+                                cc.Item().Height(28);
+                                cc.Item().Text(info.PreparedByName).FontSize(9);
+                            });
+                            r.RelativeItem().AlignRight().Column(cc =>
+                            {
+                                cc.Item().Text("Certified for payment — for " + info.CompanyDisplay).SemiBold();
+                                cc.Item().Height(28);
+                                cc.Item().Text("Authorised signatory").FontSize(9).FontColor(Colors.Grey.Darken2);
+                            });
+                        });
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
     private static IEnumerable<string> SplitLines(string? s) =>
         (s ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 

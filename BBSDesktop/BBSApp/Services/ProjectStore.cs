@@ -80,6 +80,9 @@ public sealed class ProjectStore
     /// <summary>Contracts, work orders, tenders, schedule of rates, and standard terms.</summary>
     public ContractRegister ContractBook { get; } = new();
 
+    /// <summary>Running-account bills, cash/bank transactions, ledgers.</summary>
+    public AccountsBook Accounts { get; } = new();
+
     /// <summary>Last calculated estimate snapshot (qty × rates).</summary>
     public EstimateResult? LastEstimate { get; set; }
     public string? LastEstimateRateBookVersionId { get; set; }
@@ -212,7 +215,7 @@ public sealed class ProjectStore
         return new JsonObject
         {
             ["format"] = "bbsproj",
-            ["version"] = 12,
+            ["version"] = 13,
             ["name"] = Name,
             ["project"] = Info.ToJson(),
             ["estimate_markups"] = Markups.ToJson(),
@@ -251,6 +254,7 @@ public sealed class ProjectStore
             ["schedule"] = Schedule.ToJson(),
             ["office"] = Office.ToJson(),
             ["contracts"] = ContractBook.ToJson(),
+            ["accounts"] = Accounts.ToJson(),
             ["last_estimate"] = LastEstimate is null ? null : EstimateCalculator.ToJson(LastEstimate),
             ["last_estimate_rate_book_version_id"] = LastEstimateRateBookVersionId ?? ""
         };
@@ -323,6 +327,7 @@ public sealed class ProjectStore
         Schedule.LoadFrom(root["schedule"] as JsonObject);
         Office.LoadFrom(root["office"] as JsonObject);
         ContractBook.LoadFrom(root["contracts"] as JsonObject);
+        Accounts.LoadFrom(root["accounts"] as JsonObject);
         LastEstimate = EstimateCalculator.FromJson(root["last_estimate"] as JsonObject);
         LastEstimateRateBookVersionId = root["last_estimate_rate_book_version_id"]?.GetValue<string>();
         if (root["levels"] is JsonArray la)
@@ -540,6 +545,7 @@ public sealed class ProjectStore
         Schedule.Clear();
         Office.Clear();
         ContractBook.Clear();
+        Accounts.Clear();
         Levels.Clear();
         LastSummary = null;
         LastBbs = null;
