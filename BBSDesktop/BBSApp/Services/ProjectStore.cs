@@ -71,6 +71,12 @@ public sealed class ProjectStore
     public CivilYields Yields { get; } = new();
     public TakeoffState Takeoff { get; } = new();
 
+    /// <summary>CPM/PERT project schedule (activities, dependencies, Gantt).</summary>
+    public ProjectSchedule Schedule { get; } = new();
+
+    /// <summary>Correspondence register: letters, memos, certificates, etc. with auto-numbering.</summary>
+    public OfficeRegister Office { get; } = new();
+
     /// <summary>Last calculated estimate snapshot (qty × rates).</summary>
     public EstimateResult? LastEstimate { get; set; }
     public string? LastEstimateRateBookVersionId { get; set; }
@@ -203,7 +209,7 @@ public sealed class ProjectStore
         return new JsonObject
         {
             ["format"] = "bbsproj",
-            ["version"] = 9,
+            ["version"] = 11,
             ["name"] = Name,
             ["project"] = Info.ToJson(),
             ["estimate_markups"] = Markups.ToJson(),
@@ -239,6 +245,8 @@ public sealed class ProjectStore
             ["doors"] = RowsToJson(Doors),
             ["windows"] = RowsToJson(Windows),
             ["takeoff"] = Takeoff.ToJson(),
+            ["schedule"] = Schedule.ToJson(),
+            ["office"] = Office.ToJson(),
             ["last_estimate"] = LastEstimate is null ? null : EstimateCalculator.ToJson(LastEstimate),
             ["last_estimate_rate_book_version_id"] = LastEstimateRateBookVersionId ?? ""
         };
@@ -308,6 +316,8 @@ public sealed class ProjectStore
         LoadRows(root["doors"] as JsonArray, Doors);
         LoadRows(root["windows"] as JsonArray, Windows);
         Takeoff.LoadFrom(root["takeoff"] as JsonObject);
+        Schedule.LoadFrom(root["schedule"] as JsonObject);
+        Office.LoadFrom(root["office"] as JsonObject);
         LastEstimate = EstimateCalculator.FromJson(root["last_estimate"] as JsonObject);
         LastEstimateRateBookVersionId = root["last_estimate_rate_book_version_id"]?.GetValue<string>();
         if (root["levels"] is JsonArray la)
@@ -522,6 +532,8 @@ public sealed class ProjectStore
         Vdf.Clear(); Skirting.Clear(); Parapet.Clear(); PlinthProtection.Clear();
         Doors.Clear(); Windows.Clear();
         Takeoff.Clear();
+        Schedule.Clear();
+        Office.Clear();
         Levels.Clear();
         LastSummary = null;
         LastBbs = null;

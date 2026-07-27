@@ -59,6 +59,9 @@ public sealed partial class SettingsPage : Page
         ContactPhoneBox.Text = info.ContactPhone;
         ContactEmailBox.Text = info.ContactEmail;
         AddressBox.Text = info.Address;
+        GstinBox.Text = info.Gstin;
+        CinBox.Text = info.Cin;
+        PanBox.Text = info.Pan;
         _pendingLogoPath = info.LogoPath ?? "";
         RefreshLogoPreview();
     }
@@ -203,6 +206,9 @@ public sealed partial class SettingsPage : Page
         info.ContactPhone = (ContactPhoneBox.Text ?? "").Trim();
         info.ContactEmail = (ContactEmailBox.Text ?? "").Trim();
         info.Address = (AddressBox.Text ?? "").Trim();
+        info.Gstin = (GstinBox.Text ?? "").Trim();
+        info.Cin = (CinBox.Text ?? "").Trim();
+        info.Pan = (PanBox.Text ?? "").Trim();
         info.LogoPath = _pendingLogoPath ?? "";
         store.Name = info.Name;
 

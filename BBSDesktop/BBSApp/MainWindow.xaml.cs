@@ -68,7 +68,9 @@ public sealed partial class MainWindow : Window
             VirtualKey.Number1 or VirtualKey.NumberPad1 => "project",
             VirtualKey.Number2 or VirtualKey.NumberPad2 => "rcc",
             VirtualKey.Number3 or VirtualKey.NumberPad3 => "civil",
-            VirtualKey.Number4 or VirtualKey.NumberPad4 => "outputs",
+            VirtualKey.Number4 or VirtualKey.NumberPad4 => "schedule",
+            VirtualKey.Number5 or VirtualKey.NumberPad5 => "office",
+            VirtualKey.Number6 or VirtualKey.NumberPad6 => "outputs",
             _ => null
         };
         if (tab is null) return;
@@ -116,6 +118,16 @@ public sealed partial class MainWindow : Window
             Cmd("plinth_protection", "Plinth protection", NavIcon("plinth_protection")),
             Cmd("doors", "Doors", NavIcon("doors")),
             Cmd("windows", "Windows", NavIcon("windows")),
+        }));
+        _tabs.Add(new RibbonTab("schedule", "Schedule", new[]
+        {
+            Cmd("schedule_activities", "Activities", Glyph("")),
+            Cmd("schedule_network", "Network", Glyph("")),
+            Cmd("schedule_gantt", "Gantt", Glyph("")),
+        }));
+        _tabs.Add(new RibbonTab("office", "Office", new[]
+        {
+            Cmd("correspondence", "Correspondence", Glyph("")),
         }));
         _tabs.Add(new RibbonTab("outputs", "Outputs", new[]
         {
@@ -410,6 +422,10 @@ public sealed partial class MainWindow : Window
             "plinth_protection" => new ElementPage(ElementSpecs.PlinthProtection(), ProjectStore.Current.PlinthProtection),
             "doors" => new ElementPage(ElementSpecs.Doors(), ProjectStore.Current.Doors),
             "windows" => new ElementPage(ElementSpecs.Windows(), ProjectStore.Current.Windows),
+            "schedule" or "schedule_activities" => new SchedulePage(SchedulePage.ScheduleTab.Activities),
+            "schedule_network" => new SchedulePage(SchedulePage.ScheduleTab.Network),
+            "schedule_gantt" => new SchedulePage(SchedulePage.ScheduleTab.Gantt),
+            "office" or "correspondence" => new CorrespondencePage(),
             "quantities" => new QuantitiesPage(),
             "po" => new PurchaseOrderPage(),
             "estimate" => new EstimatePage(),

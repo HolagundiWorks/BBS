@@ -250,6 +250,174 @@ public static class PdfExport
         }
     }
 
+    public static bool ExportSchedule(string path, ProjectStore store, out string? error)
+    {
+        error = null;
+        try
+        {
+            var schedule = store.Schedule;
+            var result = ScheduleCalculator.Compute(schedule);
+            var headers = new[] { "#", "Activity", "WBS", "Dur (d)", "Start", "Finish", "Total float", "Critical", "Preds" };
+            var rows = new List<string[]>();
+            for (int i = 0; i < schedule.Activities.Count; i++)
+            {
+                var a = schedule.Activities[i];
+                string preds = string.Join(", ", a.Links
+                    .Select(l => schedule.Find(l.PredecessorId))
+                    .Where(p => p is not null)
+                    .Select(p => schedule.IndexOf(p!).ToString()));
+                rows.Add(new[]
+                {
+                    (i + 1).ToString(),
+                    a.Name,
+                    a.Wbs,
+                    a.DurationDays.ToString("0.#"),
+                    schedule.DateForOffset(a.EarlyStart).ToString("dd MMM yyyy"),
+                    schedule.DateForOffset(a.EarlyFinish).ToString("dd MMM yyyy"),
+                    a.InCycle ? "—" : a.TotalFloat.ToString("0.#"),
+                    a.InCycle ? "cycle" : a.IsCritical ? "Yes" : "",
+                    preds
+                });
+            }
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Landscape());
+                    page.Margin(28);
+                    page.DefaultTextStyle(x => x.FontSize(9).FontFamily(Fonts.Calibri));
+                    page.Header().Element(c => ReportHeader(c, store,
+                        $"Project schedule (CPM) · {result.ProjectDurationDays:0.#} working days · finish {result.FinishDate:dd MMM yyyy}"));
+                    page.Footer().Element(c => ReportFooter(c, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(12);
+                        col.Item().Text(
+                            $"Start {schedule.StartDate:dd MMM yyyy} · {schedule.WorkingDaysPerWeek}-day week · "
+                            + $"{result.ActivityCount} activities · {result.CriticalCount} on critical path"
+                            + (result.HasCycle ? "  ·  WARNING: circular dependency present" : "")).FontSize(9);
+                        col.Item().Element(c => TableSection(c, "Activity schedule", headers, rows));
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool ExportOfficeDocument(string path, ProjectStore store, OfficeDocument doc, out string? error)
+    {
+        error = null;
+        try
+        {
+            var info = store.Info;
+            string number = string.IsNullOrWhiteSpace(doc.Number)
+                ? store.Office.PreviewNumber(doc, info.CompanyDisplay) + "  (draft)"
+                : doc.Number;
+            string typeName = DocTypeInfo.DisplayFor(doc.TypeCode);
+            string signName = string.IsNullOrWhiteSpace(doc.SignatoryName) ? info.PreparedByName : doc.SignatoryName;
+            string signRole = string.IsNullOrWhiteSpace(doc.SignatoryRole) ? info.PreparedByRole : doc.SignatoryRole;
+            bool hasTo = DocTypeInfo.HasRecipient(doc.TypeCode) && !string.IsNullOrWhiteSpace(doc.ToName);
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(40);
+                    page.DefaultTextStyle(x => x.FontSize(11).FontFamily(Fonts.Calibri));
+                    page.Footer().Element(c => ReportFooter(c, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(10);
+
+                        // Letterhead
+                        col.Item().Row(row =>
+                        {
+                            var logoPath = info.ResolvedLogoPath;
+                            if (logoPath is not null)
+                                row.ConstantItem(64).Height(52).PaddingRight(10).AlignMiddle().Image(logoPath).FitArea();
+                            row.RelativeItem().Column(c =>
+                            {
+                                c.Item().Text(info.CompanyDisplay).SemiBold().FontSize(16);
+                                if (!string.IsNullOrWhiteSpace(info.Address))
+                                    c.Item().Text(info.Address).FontSize(8).FontColor(Colors.Grey.Darken2);
+                                var bits = new List<string>();
+                                if (!string.IsNullOrWhiteSpace(info.ContactPhone)) bits.Add(info.ContactPhone);
+                                if (!string.IsNullOrWhiteSpace(info.ContactEmail)) bits.Add(info.ContactEmail);
+                                if (bits.Count > 0) c.Item().Text(string.Join("  ·  ", bits)).FontSize(8).FontColor(Colors.Grey.Darken2);
+                                if (!string.IsNullOrWhiteSpace(info.RegistrationLine))
+                                    c.Item().Text(info.RegistrationLine).FontSize(8).FontColor(Colors.Grey.Darken1);
+                            });
+                        });
+                        col.Item().PaddingVertical(2).LineHorizontal(1.5f).LineColor(Colors.Grey.Darken1);
+
+                        // Number / date
+                        col.Item().PaddingTop(6).Row(row =>
+                        {
+                            row.RelativeItem().Text(t => { t.Span("No: ").SemiBold(); t.Span(number); });
+                            row.RelativeItem().AlignRight().Text(t =>
+                            {
+                                t.Span("Date: ").SemiBold();
+                                t.Span(doc.IssueDate.ToString("dd MMM yyyy"));
+                            });
+                        });
+
+                        // Recipient
+                        if (hasTo)
+                        {
+                            col.Item().PaddingTop(6).Text("To,").SemiBold();
+                            col.Item().Text(doc.ToName);
+                            foreach (var line in SplitLines(doc.ToAddress))
+                                col.Item().Text(line);
+                        }
+
+                        // Subject / title
+                        col.Item().PaddingTop(10).AlignCenter().Text($"{typeName}".ToUpperInvariant())
+                            .SemiBold().FontSize(12).FontColor(Colors.Grey.Darken2);
+                        if (!string.IsNullOrWhiteSpace(doc.Subject))
+                            col.Item().PaddingTop(2).Text(t =>
+                            {
+                                t.Span("Subject: ").SemiBold();
+                                t.Span(doc.Subject).SemiBold();
+                            });
+
+                        // Body
+                        col.Item().PaddingTop(10);
+                        foreach (var line in SplitLines(doc.Body))
+                        {
+                            if (line.Length == 0) col.Item().Height(6);
+                            else col.Item().Text(line).LineHeight(1.35f);
+                        }
+
+                        // Signature
+                        col.Item().PaddingTop(28).AlignRight().Column(c =>
+                        {
+                            c.Item().Text($"For {info.CompanyDisplay}").SemiBold();
+                            c.Item().Height(34);
+                            if (!string.IsNullOrWhiteSpace(signName)) c.Item().Text(signName).SemiBold();
+                            if (!string.IsNullOrWhiteSpace(signRole)) c.Item().Text(signRole).FontSize(9).FontColor(Colors.Grey.Darken2);
+                        });
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private static IEnumerable<string> SplitLines(string? s) =>
+        (s ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+
     private sealed class ReportSection
     {
         public string Title { get; init; } = "";
@@ -395,6 +563,8 @@ public static class PdfExport
                     }
                     if (!string.IsNullOrWhiteSpace(info.Address))
                         c.Item().Text(info.Address).FontSize(7).FontColor(Colors.Grey.Darken1);
+                    if (!string.IsNullOrWhiteSpace(info.RegistrationLine))
+                        c.Item().Text(info.RegistrationLine).FontSize(7).FontColor(Colors.Grey.Darken1);
                 });
 
                 row.ConstantItem(200).AlignRight().Column(c =>

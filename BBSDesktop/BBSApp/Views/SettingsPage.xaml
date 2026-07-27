@@ -87,6 +87,25 @@
                                              TextWrapping="Wrap"
                                              MinHeight="72"
                                              AutomationProperties.Name="Company address"/>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="GstinBox" Grid.Column="0"
+                                                 Header="GSTIN"
+                                                 PlaceholderText="22AAAAA0000A1Z5"
+                                                 AutomationProperties.Name="GSTIN"/>
+                                        <TextBox x:Name="CinBox" Grid.Column="1"
+                                                 Header="CIN / Reg. no."
+                                                 PlaceholderText="U00000KA0000PTC000000"
+                                                 AutomationProperties.Name="Company registration number"/>
+                                        <TextBox x:Name="PanBox" Grid.Column="2"
+                                                 Header="PAN"
+                                                 PlaceholderText="AAAAA0000A"
+                                                 AutomationProperties.Name="PAN"/>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
