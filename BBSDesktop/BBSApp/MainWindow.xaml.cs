@@ -151,6 +151,13 @@ public sealed partial class MainWindow : Window
             Cmd("stores_inventory", "Inventory", Glyph("")),
             Cmd("stores_masters", "Masters", Glyph("")),
         }));
+        _tabs.Add(new RibbonTab("hr", "HR & resources", new[]
+        {
+            Cmd("org_sites", "Sites", Glyph("")),
+            Cmd("org_resources", "Resources", Glyph("")),
+            Cmd("org_employees", "Employees", Glyph("")),
+            Cmd("org_payroll", "Payroll", Glyph("")),
+        }));
         _tabs.Add(new RibbonTab("outputs", "Outputs", new[]
         {
             Cmd("quantities", "Quantities", Glyph("\uE9D2")),
@@ -458,6 +465,10 @@ public sealed partial class MainWindow : Window
             "stores_grn" => new StoresPage(StoresPage.StoresTab.Grn),
             "stores_inventory" => new StoresPage(StoresPage.StoresTab.Inventory),
             "stores_masters" => new StoresPage(StoresPage.StoresTab.Masters),
+            "hr" or "org_sites" => new OrgPage(OrgPage.OrgTab.Sites),
+            "org_resources" => new OrgPage(OrgPage.OrgTab.Resources),
+            "org_employees" => new OrgPage(OrgPage.OrgTab.Employees),
+            "org_payroll" => new OrgPage(OrgPage.OrgTab.Payroll),
             "quantities" => new QuantitiesPage(),
             "po" => new PurchaseOrderPage(),
             "estimate" => new EstimatePage(),

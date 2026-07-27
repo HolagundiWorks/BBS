@@ -660,6 +660,60 @@ public static class PdfExport
         }
     }
 
+    public static bool ExportPayroll(string path, ProjectStore store, string month, out string? error)
+    {
+        error = null;
+        try
+        {
+            var org = store.Org;
+            string monthLabel = DateTime.TryParseExact(month + "-01", "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var md)
+                ? md.ToString("MMMM yyyy") : month;
+
+            var headers = new[] { "#", "Code", "Name", "Designation", "Site", "Days", "Gross", "Advance", "Net" };
+            var rows = new List<string[]>();
+            double tg = 0, ta = 0, tn = 0;
+            int i = 1;
+            foreach (var emp in org.Employees.Where(e => e.Active))
+            {
+                var rec = org.GetPayroll(emp.Id, month);
+                double gross = org.Gross(emp, rec.DaysPresent);
+                double net = gross - rec.Advance;
+                tg += gross; ta += rec.Advance; tn += net;
+                rows.Add(new[]
+                {
+                    (i++).ToString(), emp.Code, emp.Name, emp.Designation, org.SiteName(emp.SiteId),
+                    rec.DaysPresent.ToString("0.#"), gross.ToString("N2"), rec.Advance.ToString("N2"), net.ToString("N2")
+                });
+            }
+            rows.Add(new[] { "", "", "Total", "", "", "", tg.ToString("N2"), ta.ToString("N2"), tn.ToString("N2") });
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Landscape());
+                    page.Margin(28);
+                    page.DefaultTextStyle(x => x.FontSize(9).FontFamily(Fonts.Calibri));
+                    page.Header().Element(cc => ReportHeader(cc, store, $"Payroll register · {monthLabel}"));
+                    page.Footer().Element(cc => ReportFooter(cc, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(10);
+                        col.Item().Text($"Working days basis: {org.WorkingDays:0.#} · {org.Employees.Count(e => e.Active)} active employee(s)").FontSize(9);
+                        col.Item().Element(cc => TableSection(cc, $"Wages & salaries — {monthLabel}", headers, rows));
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
     private static IEnumerable<string> SplitLines(string? s) =>
         (s ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 

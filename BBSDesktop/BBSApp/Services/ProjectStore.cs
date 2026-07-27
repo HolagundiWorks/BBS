@@ -86,6 +86,9 @@ public sealed class ProjectStore
     /// <summary>Procurement & stores: suppliers, warehouses, POs, GRNs, issues, inventory.</summary>
     public StoresBook Stores { get; } = new();
 
+    /// <summary>Sites, resources, employees, attendance and payroll.</summary>
+    public OrgBook Org { get; } = new();
+
     /// <summary>Last calculated estimate snapshot (qty × rates).</summary>
     public EstimateResult? LastEstimate { get; set; }
     public string? LastEstimateRateBookVersionId { get; set; }
@@ -218,7 +221,7 @@ public sealed class ProjectStore
         return new JsonObject
         {
             ["format"] = "bbsproj",
-            ["version"] = 14,
+            ["version"] = 15,
             ["name"] = Name,
             ["project"] = Info.ToJson(),
             ["estimate_markups"] = Markups.ToJson(),
@@ -259,6 +262,7 @@ public sealed class ProjectStore
             ["contracts"] = ContractBook.ToJson(),
             ["accounts"] = Accounts.ToJson(),
             ["stores"] = Stores.ToJson(),
+            ["org"] = Org.ToJson(),
             ["last_estimate"] = LastEstimate is null ? null : EstimateCalculator.ToJson(LastEstimate),
             ["last_estimate_rate_book_version_id"] = LastEstimateRateBookVersionId ?? ""
         };
@@ -333,6 +337,7 @@ public sealed class ProjectStore
         ContractBook.LoadFrom(root["contracts"] as JsonObject);
         Accounts.LoadFrom(root["accounts"] as JsonObject);
         Stores.LoadFrom(root["stores"] as JsonObject);
+        Org.LoadFrom(root["org"] as JsonObject);
         LastEstimate = EstimateCalculator.FromJson(root["last_estimate"] as JsonObject);
         LastEstimateRateBookVersionId = root["last_estimate_rate_book_version_id"]?.GetValue<string>();
         if (root["levels"] is JsonArray la)
@@ -552,6 +557,7 @@ public sealed class ProjectStore
         ContractBook.Clear();
         Accounts.Clear();
         Stores.Clear();
+        Org.Clear();
         Levels.Clear();
         LastSummary = null;
         LastBbs = null;
@@ -569,6 +575,7 @@ public sealed class ProjectStore
         EnsureDefaultLevels();
         ContractBook.EnsureSeeded();
         Stores.EnsureSeeded();
+        Org.EnsureSeeded();
         double h0 = ColumnHeightFor("Lvl0");
         if (Columns.Count == 0)
             Columns.Add(new Dictionary<string, string>
