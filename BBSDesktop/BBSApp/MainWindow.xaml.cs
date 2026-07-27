@@ -72,7 +72,8 @@ public sealed partial class MainWindow : Window
             VirtualKey.Number5 or VirtualKey.NumberPad5 => "office",
             VirtualKey.Number6 or VirtualKey.NumberPad6 => "contracts",
             VirtualKey.Number7 or VirtualKey.NumberPad7 => "accounts",
-            VirtualKey.Number8 or VirtualKey.NumberPad8 => "outputs",
+            VirtualKey.Number8 or VirtualKey.NumberPad8 => "stores",
+            VirtualKey.Number9 or VirtualKey.NumberPad9 => "outputs",
             _ => null
         };
         if (tab is null) return;
@@ -142,6 +143,13 @@ public sealed partial class MainWindow : Window
             Cmd("accounts_bills", "Running bills", Glyph("")),
             Cmd("accounts_cash", "Cash book", Glyph("")),
             Cmd("accounts_ledger", "Ledger", Glyph("")),
+        }));
+        _tabs.Add(new RibbonTab("stores", "Stores", new[]
+        {
+            Cmd("stores_po", "Purchase orders", Glyph("")),
+            Cmd("stores_grn", "Goods receipt", Glyph("")),
+            Cmd("stores_inventory", "Inventory", Glyph("")),
+            Cmd("stores_masters", "Masters", Glyph("")),
         }));
         _tabs.Add(new RibbonTab("outputs", "Outputs", new[]
         {
@@ -446,6 +454,10 @@ public sealed partial class MainWindow : Window
             "accounts" or "accounts_bills" => new AccountsPage(AccountsPage.AccountsTab.Bills),
             "accounts_cash" => new AccountsPage(AccountsPage.AccountsTab.Cash),
             "accounts_ledger" => new AccountsPage(AccountsPage.AccountsTab.Ledger),
+            "stores" or "stores_po" => new StoresPage(StoresPage.StoresTab.Orders),
+            "stores_grn" => new StoresPage(StoresPage.StoresTab.Grn),
+            "stores_inventory" => new StoresPage(StoresPage.StoresTab.Inventory),
+            "stores_masters" => new StoresPage(StoresPage.StoresTab.Masters),
             "quantities" => new QuantitiesPage(),
             "po" => new PurchaseOrderPage(),
             "estimate" => new EstimatePage(),

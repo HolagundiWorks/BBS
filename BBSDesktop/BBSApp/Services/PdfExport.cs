@@ -596,6 +596,70 @@ public static class PdfExport
         }
     }
 
+    public static bool ExportStorePurchaseOrder(string path, ProjectStore store, PurchaseOrder po, out string? error)
+    {
+        error = null;
+        try
+        {
+            var info = store.Info;
+            string number = string.IsNullOrWhiteSpace(po.Number)
+                ? store.Stores.Preview("PO", po.Date, info.CompanyDisplay) + "  (draft)"
+                : po.Number;
+            string wh = store.Stores.WarehouseName(po.WarehouseId);
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(32);
+                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily(Fonts.Calibri));
+                    page.Header().Element(cc => ReportHeader(cc, store, "Purchase order"));
+                    page.Footer().Element(cc => ReportFooter(cc, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(6);
+                        col.Item().Row(r =>
+                        {
+                            r.RelativeItem().Text(t => { t.Span("PO No: ").SemiBold(); t.Span(number); });
+                            r.RelativeItem().AlignRight().Text(t => { t.Span("Date: ").SemiBold(); t.Span(po.Date.ToString("dd MMM yyyy")); });
+                        });
+                        col.Item().Text(t => { t.Span("To (Supplier): ").SemiBold(); t.Span(string.IsNullOrWhiteSpace(po.SupplierName) ? "—" : po.SupplierName); });
+                        col.Item().Text(t => { t.Span("Deliver to: ").SemiBold(); t.Span(wh); });
+
+                        var headers = new[] { "#", "Material", "Unit", "Qty", "Rate", "Amount" };
+                        var rows = new List<string[]>();
+                        int i = 1;
+                        foreach (var l in po.Lines)
+                            rows.Add(new[] { (i++).ToString(), l.Material, l.Unit,
+                                l.Qty.ToString("0.###"), l.Rate.ToString("0.##"), l.Amount.ToString("0.##") });
+                        col.Item().PaddingTop(6).Element(cc => TableSection(cc, "Ordered materials", headers, rows));
+                        col.Item().AlignRight().Text(t => { t.Span("Order total: ").SemiBold(); t.Span("Rs. " + po.Total.ToString("N2")); });
+
+                        if (!string.IsNullOrWhiteSpace(po.Notes))
+                        {
+                            col.Item().PaddingTop(6).Text("Notes / terms:").SemiBold();
+                            foreach (var line in SplitLines(po.Notes)) col.Item().Text(line.Length == 0 ? " " : line);
+                        }
+
+                        col.Item().PaddingTop(34).AlignRight().Column(cc =>
+                        {
+                            cc.Item().Text("For " + info.CompanyDisplay).SemiBold();
+                            cc.Item().Height(30);
+                            cc.Item().Text("Authorised signatory").FontSize(9).FontColor(Colors.Grey.Darken2);
+                        });
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
     private static IEnumerable<string> SplitLines(string? s) =>
         (s ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
