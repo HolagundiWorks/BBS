@@ -72,6 +72,13 @@
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
                             <Button x:Name="NewBtn" Content="Add row" Style="{StaticResource PrimaryButtonStyle}"
                                     Click="New_Click" ToolTipService.ToolTip="Add blank row (Ctrl+N)"/>
+                            <Button x:Name="DuplicateBtn" Content="Duplicate row" Style="{StaticResource SecondaryButtonStyle}"
+                                    Click="Duplicate_Click"
+                                    ToolTipService.ToolTip="Copy the selected row's values into a new row below (Ctrl+D)">
+                                <Button.KeyboardAccelerators>
+                                    <KeyboardAccelerator Modifiers="Control" Key="D"/>
+                                </Button.KeyboardAccelerators>
+                            </Button>
                             <Button x:Name="DeleteBtn" Content="Delete row" Style="{StaticResource SecondaryButtonStyle}"
                                     Click="Delete_Click" ToolTipService.ToolTip="Delete selected row"/>
                             <Button x:Name="SaveBtn" Content="Save include" Style="{StaticResource SecondaryButtonStyle}"

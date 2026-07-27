@@ -81,6 +81,8 @@ public sealed class Contract
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Number { get; set; } = "";
+    /// <summary>Persona that issues the order (normally the PM to the contractor).</summary>
+    public PartyRole IssuedByRole { get; set; } = PartyRole.PM;
     public ContractKind Kind { get; set; } = ContractKind.ItemRateWorkOrder;
     public string Title { get; set; } = "";
     public string ContractorName { get; set; } = "";
@@ -120,6 +122,7 @@ public sealed class Contract
         {
             ["id"] = Id,
             ["number"] = Number,
+            ["issued_by"] = IssuedByRole.ToToken(),
             ["kind"] = (int)Kind,
             ["title"] = Title,
             ["contractor_name"] = ContractorName,
@@ -142,6 +145,7 @@ public sealed class Contract
         {
             Id = o["id"]?.GetValue<string>() ?? Guid.NewGuid().ToString("N"),
             Number = o["number"]?.GetValue<string>() ?? "",
+            IssuedByRole = PartyRoleX.Parse(o["issued_by"]?.GetValue<string>()),
             Kind = (ContractKind)(o["kind"]?.GetValue<int>() ?? 0),
             Title = o["title"]?.GetValue<string>() ?? "",
             ContractorName = o["contractor_name"]?.GetValue<string>() ?? "",
@@ -178,21 +182,27 @@ public sealed class ContractRegister
         return string.IsNullOrWhiteSpace(initials) ? "AQC" : initials;
     }
 
+    private static string PartyPrefix(Contract c, string companyName) =>
+        ProjectStore.Current.Parties.For(c.IssuedByRole).EffectivePrefix(companyName);
+
+    private static string CounterKey(Contract c, string fy) =>
+        $"{c.IssuedByRole.ToToken()}|{c.KindCode}|{fy}";
+
     public string PreviewNumber(Contract c, string companyName)
     {
         string fy = OfficeRegister.FinancialYear(c.AwardDate);
-        int next = (_counters.TryGetValue($"{c.KindCode}|{fy}", out var last) ? last : 0) + 1;
-        return $"{EffectivePrefix(companyName)}/{c.KindCode}/{fy}/{next:000}";
+        int next = (_counters.TryGetValue(CounterKey(c, fy), out var last) ? last : 0) + 1;
+        return $"{PartyPrefix(c, companyName)}/{c.KindCode}/{fy}/{next:000}";
     }
 
     public void Finalize(Contract c, string companyName)
     {
         if (c.Finalized && !string.IsNullOrWhiteSpace(c.Number)) return;
         string fy = OfficeRegister.FinancialYear(c.AwardDate);
-        string key = $"{c.KindCode}|{fy}";
+        string key = CounterKey(c, fy);
         int next = (_counters.TryGetValue(key, out var last) ? last : 0) + 1;
         _counters[key] = next;
-        c.Number = $"{EffectivePrefix(companyName)}/{c.KindCode}/{fy}/{next:000}";
+        c.Number = $"{PartyPrefix(c, companyName)}/{c.KindCode}/{fy}/{next:000}";
         c.Finalized = true;
     }
 
@@ -269,7 +279,8 @@ public sealed class ContractRegister
         Prefix = o["prefix"]?.GetValue<string>() ?? "";
         if (o["counters"] is JsonObject c)
             foreach (var kv in c)
-                if (kv.Value is JsonValue v && v.TryGetValue<int>(out var n)) _counters[kv.Key] = n;
+                if (kv.Value is JsonValue v && v.TryGetValue<int>(out var n))
+                    _counters[OfficeRegister.MigrateCounterKey(kv.Key)] = n;
         if (o["contracts"] is JsonArray ca) foreach (var it in ca) if (it is JsonObject co) Contracts.Add(Contract.FromJson(co));
         if (o["rates"] is JsonArray ra) foreach (var it in ra) if (it is JsonObject ro) Rates.Add(SorItem.FromJson(ro));
         if (o["terms"] is JsonArray ta) foreach (var it in ta) if (it is JsonObject to) Terms.Add(StandardTerm.FromJson(to));

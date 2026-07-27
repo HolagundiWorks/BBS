@@ -191,6 +191,7 @@ public sealed partial class ElementPage : Page
     {
         FinishSurfacesCalculator.SyncPropose(ProjectStore.Current);
         NewBtn.Visibility = Visibility.Collapsed;
+        DuplicateBtn.Visibility = Visibility.Collapsed;
         DeleteBtn.Visibility = Visibility.Collapsed;
         UndoBtn.Visibility = Visibility.Collapsed;
         RefreshComputedBtn.Visibility = Visibility.Visible;
@@ -210,6 +211,7 @@ public sealed partial class ElementPage : Page
     {
         ShutteringCalculator.SyncStore(ProjectStore.Current);
         NewBtn.Visibility = Visibility.Collapsed;
+        DuplicateBtn.Visibility = Visibility.Collapsed;
         DeleteBtn.Visibility = Visibility.Collapsed;
         UndoBtn.Visibility = Visibility.Collapsed;
         RefreshComputedBtn.Visibility = Visibility.Visible;
@@ -1298,6 +1300,43 @@ public sealed partial class ElementPage : Page
     {
         if (_spec.IsComputedFromRcc) return;
         AddSheetRow();
+    }
+
+    private void Duplicate_Click(object sender, RoutedEventArgs e)
+    {
+        // Shuttering is auto from RCC and finishes are proposed — no manual duplicate there.
+        if (_spec.IsComputedFromRcc || _spec.IsFinishReconcile) return;
+        DuplicateSheetRow();
+    }
+
+    /// <summary>
+    /// Clone the selected row (all common fields — geometry, bars, cover, grades…),
+    /// give the copy a fresh unique mark, and insert it right below the original.
+    /// Saves re-typing every field for near-identical members (retaining walls, footings, etc.).
+    /// </summary>
+    private void DuplicateSheetRow()
+    {
+        if (_editIndex < 0 || _editIndex >= _rows.Count)
+        {
+            ShowError("Select a row to duplicate.");
+            return;
+        }
+        var clone = new Dictionary<string, string>(_rows[_editIndex], StringComparer.OrdinalIgnoreCase);
+        // New mark so the copy doesn't collide with the source; keeps prefix (RW, C, RB…) via prototype.
+        clone["mark"] = MemberSheetHelper.SuggestNextMark(_spec.Kind, _rows, clone);
+        int insertAt = _editIndex + 1;
+        _rows.Insert(insertAt, clone);
+        _editIndex = insertAt;
+        _sheetEditRow = insertAt;
+        if (IsRccKind(_spec.Kind))
+            ShutteringCalculator.SyncStore(ProjectStore.Current);
+        _sheetEditBusy = true;
+        ProjectStore.Current.Notify();
+        _sheetEditBusy = false;
+        RefreshSheet();
+        LoadRecord(insertAt);
+        FocusSheetCell(insertAt, 0);
+        ShowSuccess($"Duplicated to {clone["mark"]}.");
     }
 
     private void AddSheetRow()

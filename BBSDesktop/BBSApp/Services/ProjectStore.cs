@@ -21,6 +21,10 @@ public sealed class ProjectStore
     /// <summary>Project identity: client, company, prepared-by, logo.</summary>
     public ProjectInfo Info { get; } = new();
 
+    /// <summary>The two operating personas (Project Manager / Contractor) + the active one.
+    /// Letters, bills, contracts and cash are branded and numbered per persona.</summary>
+    public PartyBook Parties { get; } = new();
+
     /// <summary>Estimate % add-ons: electrical, plumbing, escalation, consulting fees.</summary>
     public EstimateMarkups Markups { get; } = new();
 
@@ -221,9 +225,10 @@ public sealed class ProjectStore
         return new JsonObject
         {
             ["format"] = "bbsproj",
-            ["version"] = 15,
+            ["version"] = 16,
             ["name"] = Name,
             ["project"] = Info.ToJson(),
+            ["parties"] = Parties.ToJson(),
             ["estimate_markups"] = Markups.ToJson(),
             ["concrete_from_rmc"] = ConcreteFromRmc ? 1 : 0,
             ["settings"] = SettingsJson(),
@@ -284,6 +289,8 @@ public sealed class ProjectStore
     {
         Name = root["name"]?.GetValue<string>() ?? "Untitled Project";
         Info.LoadFrom(root["project"] as JsonObject);
+        // Personas load after Info so a legacy project seeds the PM identity from its own company.
+        Parties.LoadFrom(root["parties"] as JsonObject, Info);
         Markups.LoadFrom(root["estimate_markups"] as JsonObject);
         // Keep legacy root name in sync if project block missing name
         if (string.IsNullOrWhiteSpace(Info.Name) || Info.Name == "Untitled Project")
@@ -541,6 +548,8 @@ public sealed class ProjectStore
     public void Reset()
     {
         Info.Reset();
+        Parties.Reset();
+        Parties.EnsureDefaults(Info);
         Markups.Reset();
         Name = Info.Name;
         FilePath = null;

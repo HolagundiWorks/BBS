@@ -12,6 +12,8 @@ public sealed class CashTxn
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public DateTime Date { get; set; } = DateTime.Today;
+    /// <summary>Persona whose cashbook this entry belongs to.</summary>
+    public PartyRole IssuedByRole { get; set; } = PartyRole.PM;
     public CashKind Kind { get; set; } = CashKind.Payment;
     public CashAccount Account { get; set; } = CashAccount.Bank;
     public string Party { get; set; } = "";
@@ -24,6 +26,7 @@ public sealed class CashTxn
     {
         ["id"] = Id,
         ["date"] = Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        ["issued_by"] = IssuedByRole.ToToken(),
         ["kind"] = (int)Kind,
         ["account"] = (int)Account,
         ["party"] = Party,
@@ -38,6 +41,7 @@ public sealed class CashTxn
         var t = new CashTxn
         {
             Id = o["id"]?.GetValue<string>() ?? Guid.NewGuid().ToString("N"),
+            IssuedByRole = PartyRoleX.Parse(o["issued_by"]?.GetValue<string>()),
             Kind = (CashKind)(o["kind"]?.GetValue<int>() ?? 1),
             Account = (CashAccount)(o["account"]?.GetValue<int>() ?? 1),
             Party = o["party"]?.GetValue<string>() ?? "",
@@ -83,6 +87,8 @@ public sealed class RunningBill
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Number { get; set; } = "";
     public int BillNo { get; set; }
+    /// <summary>Persona that raises this RA bill (normally the contractor).</summary>
+    public PartyRole IssuedByRole { get; set; } = PartyRole.Contractor;
     public DateTime Date { get; set; } = DateTime.Today;
     public string ContractId { get; set; } = "";
     public string ContractLabel { get; set; } = "";
@@ -91,12 +97,28 @@ public sealed class RunningBill
     public double RetentionPct { get; set; } = 5;
     public double OtherDeductions { get; set; }
     public double AdvanceRecovery { get; set; }
+    // Statutory (India). Defaults 0 so legacy bills are unchanged; new bills seed sensible values in the UI.
+    /// <summary>Output GST added on the taxable value (CGST+SGST or IGST), e.g. 18.</summary>
+    public double GstPct { get; set; }
+    /// <summary>Income-tax TDS u/s 194C on gross (typically 1% individual / 2% company).</summary>
+    public double TdsPct { get; set; }
+    /// <summary>Building &amp; other construction workers' welfare cess on gross (typically 1%).</summary>
+    public double CessPct { get; set; }
+    /// <summary>GST-TDS on taxable value (2% where the deductor is required to deduct).</summary>
+    public double GstTdsPct { get; set; }
     public bool Certified { get; set; }
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
     public double Gross => Lines.Sum(l => l.Amount);
+    public double Gst => Gross * GstPct / 100.0;
+    /// <summary>Taxable value + GST — the contractor's tax-invoice total before deductions.</summary>
+    public double Invoice => Gross + Gst;
     public double Retention => Gross * RetentionPct / 100.0;
-    public double Net => Gross - Retention - OtherDeductions - AdvanceRecovery;
+    public double Tds => Gross * TdsPct / 100.0;
+    public double Cess => Gross * CessPct / 100.0;
+    public double GstTds => Gross * GstTdsPct / 100.0;
+    public double StatutoryDeductions => Retention + Tds + Cess + GstTds + OtherDeductions + AdvanceRecovery;
+    public double Net => Invoice - StatutoryDeductions;
 
     public JsonObject ToJson()
     {
@@ -107,6 +129,7 @@ public sealed class RunningBill
             ["id"] = Id,
             ["number"] = Number,
             ["bill_no"] = BillNo,
+            ["issued_by"] = IssuedByRole.ToToken(),
             ["date"] = Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             ["contract_id"] = ContractId,
             ["contract_label"] = ContractLabel,
@@ -114,6 +137,10 @@ public sealed class RunningBill
             ["retention_pct"] = RetentionPct,
             ["other_deductions"] = OtherDeductions,
             ["advance_recovery"] = AdvanceRecovery,
+            ["gst_pct"] = GstPct,
+            ["tds_pct"] = TdsPct,
+            ["cess_pct"] = CessPct,
+            ["gst_tds_pct"] = GstTdsPct,
             ["certified"] = Certified ? 1 : 0,
             ["lines"] = lines,
             ["created_utc"] = CreatedUtc.ToString("o", CultureInfo.InvariantCulture)
@@ -127,12 +154,17 @@ public sealed class RunningBill
             Id = o["id"]?.GetValue<string>() ?? Guid.NewGuid().ToString("N"),
             Number = o["number"]?.GetValue<string>() ?? "",
             BillNo = o["bill_no"]?.GetValue<int>() ?? 0,
+            IssuedByRole = o["issued_by"] is null ? PartyRole.PM : PartyRoleX.Parse(o["issued_by"]!.GetValue<string>()),
             ContractId = o["contract_id"]?.GetValue<string>() ?? "",
             ContractLabel = o["contract_label"]?.GetValue<string>() ?? "",
             Party = o["party"]?.GetValue<string>() ?? "",
             RetentionPct = o["retention_pct"]?.GetValue<double>() ?? 5,
             OtherDeductions = o["other_deductions"]?.GetValue<double>() ?? 0,
             AdvanceRecovery = o["advance_recovery"]?.GetValue<double>() ?? 0,
+            GstPct = o["gst_pct"]?.GetValue<double>() ?? 0,
+            TdsPct = o["tds_pct"]?.GetValue<double>() ?? 0,
+            CessPct = o["cess_pct"]?.GetValue<double>() ?? 0,
+            GstTdsPct = o["gst_tds_pct"]?.GetValue<double>() ?? 0,
             Certified = (o["certified"]?.GetValue<int>() ?? 0) != 0
         };
         if (DateTime.TryParse(o["date"]?.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)) b.Date = d;
@@ -161,22 +193,28 @@ public sealed class AccountsBook
         return string.IsNullOrWhiteSpace(initials) ? "AQC" : initials;
     }
 
+    private static string PartyPrefix(RunningBill b, string companyName) =>
+        ProjectStore.Current.Parties.For(b.IssuedByRole).EffectivePrefix(companyName);
+
+    private static string CounterKey(RunningBill b, string fy) =>
+        $"{b.IssuedByRole.ToToken()}|RA|{fy}";
+
     public string PreviewBillNumber(RunningBill b, string companyName)
     {
         string fy = OfficeRegister.FinancialYear(b.Date);
-        int next = (_counters.TryGetValue($"RA|{fy}", out var last) ? last : 0) + 1;
-        return $"{EffectivePrefix(companyName)}/RA/{fy}/{next:000}";
+        int next = (_counters.TryGetValue(CounterKey(b, fy), out var last) ? last : 0) + 1;
+        return $"{PartyPrefix(b, companyName)}/RA/{fy}/{next:000}";
     }
 
     public void CertifyBill(RunningBill b, string companyName)
     {
         if (b.Certified && !string.IsNullOrWhiteSpace(b.Number)) return;
         string fy = OfficeRegister.FinancialYear(b.Date);
-        string key = $"RA|{fy}";
+        string key = CounterKey(b, fy);
         int next = (_counters.TryGetValue(key, out var last) ? last : 0) + 1;
         _counters[key] = next;
-        b.BillNo = Bills.Count(x => x.Certified) + 1;
-        b.Number = $"{EffectivePrefix(companyName)}/RA/{fy}/{next:000}";
+        b.BillNo = Bills.Count(x => x.Certified && x.IssuedByRole == b.IssuedByRole) + 1;
+        b.Number = $"{PartyPrefix(b, companyName)}/RA/{fy}/{next:000}";
         b.Certified = true;
     }
 
@@ -233,7 +271,8 @@ public sealed class AccountsBook
         OpeningBank = o["opening_bank"]?.GetValue<double>() ?? 0;
         if (o["counters"] is JsonObject c)
             foreach (var kv in c)
-                if (kv.Value is JsonValue v && v.TryGetValue<int>(out var n)) _counters[kv.Key] = n;
+                if (kv.Value is JsonValue v && v.TryGetValue<int>(out var n))
+                    _counters[OfficeRegister.MigrateCounterKey(kv.Key)] = n;
         if (o["bills"] is JsonArray ba) foreach (var it in ba) if (it is JsonObject bo) Bills.Add(RunningBill.FromJson(bo));
         if (o["transactions"] is JsonArray ta) foreach (var it in ta) if (it is JsonObject to) Transactions.Add(CashTxn.FromJson(to));
     }

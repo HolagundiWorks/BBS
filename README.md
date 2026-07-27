@@ -2,11 +2,13 @@
 
 **AQC-Core** (*Accelerated Quantity and Costing Core*) — quantity take-off and costing by **Human Centic Works, Hospet**.
 
-RCC bar bending schedules, civil BOQ, drawing takeoff, rate books, DSR-style estimates (with electrical / plumbing / escalation / consulting %), and purchase orders.
+RCC bar bending schedules, civil BOQ, drawing takeoff, rate books, DSR-style estimates (with electrical / plumbing / escalation / consulting %), and purchase orders — plus back-office modules for project scheduling, correspondence, contracts, running-account billing, stores and HR.
+
+One project can be operated as either a **Project Manager / PMC** or a **Contractor**: each persona has its own letterhead and numbering series, and every letter, bill and order is branded and numbered accordingly.
 
 Quantities follow IS 456 / IS 1200–derived conventions — always cross-check against drawings.
 
-**Version:** 1.0.1 · **License:** [Apache License 2.0](LICENSE) · see also [NOTICE](NOTICE) · [CHANGELOG](CHANGELOG.md)
+**Version:** 1.1.0 · **License:** [Apache License 2.0](LICENSE) · see also [NOTICE](NOTICE) · [CHANGELOG](CHANGELOG.md)
 
 ## Stack
 
@@ -81,7 +83,14 @@ Output: `BBSDesktop\artifacts\msix\*.msix`
 | Rate book | App-level versioned rates (`%LocalAppData%\AQCCore\`) |
 | Estimate | DSR abstract (L/B/H, area, volume) + % markups → grand total; PDF sketches appendix |
 | PO / report | Steel & materials PO; project PDF with BOQ tables + sketches |
-| Project file | `.bbsproj` (JSON, v9 includes project info + estimate markups) |
+| Personas | One project operated as **PM / PMC** or **Contractor** — declared in **File → Project settings**; each has its own letterhead + numbering series (`PMC/…` vs `CON/…`) |
+| Schedule | CPM / PERT scheduling with activity network + Gantt |
+| Correspondence | Letters, memos, notices, circulars, certificates, declarations, site instructions, work-order notes, interim payment certificates — FY auto-numbering, per-persona letterhead |
+| Contracts | Item-rate / lump-sum work orders & tenders, schedule of rates, standard-terms library, retention |
+| Accounts | RA bills with retention + statutory deductions (GST, TDS 194C, labour cess, GST-TDS), certify & number, cash/bank book, per-contractor ledger |
+| Stores | Purchase orders, goods-receipt notes, inventory, supplier / warehouse masters |
+| HR & resources | Sites, resources, employees, attendance & payroll (payroll register PDF) |
+| Project file | `.bbsproj` (JSON, v16 — project info, personas, estimate markups, schedule, office, contracts, accounts, stores, HR) |
 
 ## Settings & data locations
 

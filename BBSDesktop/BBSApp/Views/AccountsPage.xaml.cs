@@ -107,6 +107,7 @@ public sealed partial class AccountsPage : Page
             ContractBox.SelectedIndex = 0;
             PartyBox.Text = "";
             RetentionBox.Value = 5; OtherDeductBox.Value = 0; AdvanceBox.Value = 0;
+            GstBox.Value = 0; TdsBox.Value = 0; CessBox.Value = 0; GstTdsBox.Value = 0;
             NumberText.Text = "—";
             SetLocked(true);
             RefreshTotals();
@@ -120,6 +121,10 @@ public sealed partial class AccountsPage : Page
         RetentionBox.Value = b.RetentionPct;
         OtherDeductBox.Value = b.OtherDeductions;
         AdvanceBox.Value = b.AdvanceRecovery;
+        GstBox.Value = b.GstPct;
+        TdsBox.Value = b.TdsPct;
+        CessBox.Value = b.CessPct;
+        GstTdsBox.Value = b.GstTdsPct;
         foreach (var l in b.Lines) _lineRows.Add(new BillLineVm(l, RefreshTotals));
         UpdateNumberText();
         SetLocked(b.Certified);
@@ -138,13 +143,18 @@ public sealed partial class AccountsPage : Page
         _current.RetentionPct = double.IsNaN(RetentionBox.Value) ? 0 : RetentionBox.Value;
         _current.OtherDeductions = double.IsNaN(OtherDeductBox.Value) ? 0 : OtherDeductBox.Value;
         _current.AdvanceRecovery = double.IsNaN(AdvanceBox.Value) ? 0 : AdvanceBox.Value;
+        _current.GstPct = double.IsNaN(GstBox.Value) ? 0 : GstBox.Value;
+        _current.TdsPct = double.IsNaN(TdsBox.Value) ? 0 : TdsBox.Value;
+        _current.CessPct = double.IsNaN(CessBox.Value) ? 0 : CessBox.Value;
+        _current.GstTdsPct = double.IsNaN(GstTdsBox.Value) ? 0 : GstTdsBox.Value;
         RowFor(_current)?.Refresh();
     }
 
     private void SetLocked(bool locked)
     {
         bool en = !locked;
-        foreach (var c in new Control[] { BillDateBox, ContractBox, PartyBox, RetentionBox, OtherDeductBox, AdvanceBox })
+        foreach (var c in new Control[] { BillDateBox, ContractBox, PartyBox, RetentionBox, OtherDeductBox, AdvanceBox,
+                                          GstBox, TdsBox, CessBox, GstTdsBox })
             c.IsEnabled = en;
         LinesGrid.IsReadOnly = locked;
         LockBar.IsOpen = locked;
@@ -158,16 +168,29 @@ public sealed partial class AccountsPage : Page
             : _book.PreviewBillNumber(_current, Company) + " (draft)";
     }
 
+    private double Box(NumberBox b) => double.IsNaN(b.Value) ? 0 : b.Value;
+
     private void RefreshTotals()
     {
         double gross = _lineRows.Sum(v => v.L.Amount);
-        double ret = gross * (double.IsNaN(RetentionBox.Value) ? 0 : RetentionBox.Value) / 100.0;
-        double other = double.IsNaN(OtherDeductBox.Value) ? 0 : OtherDeductBox.Value;
-        double adv = double.IsNaN(AdvanceBox.Value) ? 0 : AdvanceBox.Value;
-        double net = gross - ret - other - adv;
-        GrossText.Text = "Gross: " + gross.ToString("N2", Inv);
-        DeductText.Text = $"Deductions: retention {ret:N2} + other {other:N2} + advance {adv:N2}";
-        NetText.Text = "Net payable: " + net.ToString("N2", Inv);
+        // Reuse the model's arithmetic so the summary matches the certified bill / PDF exactly.
+        var calc = new RunningBill
+        {
+            RetentionPct = Box(RetentionBox), OtherDeductions = Box(OtherDeductBox), AdvanceRecovery = Box(AdvanceBox),
+            GstPct = Box(GstBox), TdsPct = Box(TdsBox), CessPct = Box(CessBox), GstTdsPct = Box(GstTdsBox)
+        };
+        foreach (var v in _lineRows) calc.Lines.Add(v.L);
+
+        GrossText.Text = calc.GstPct > 0
+            ? $"Gross: {gross.ToString("N2", Inv)}   +GST {calc.Gst.ToString("N2", Inv)}   = Invoice {calc.Invoice.ToString("N2", Inv)}"
+            : "Gross: " + gross.ToString("N2", Inv);
+        DeductText.Text = "Deductions: retention " + calc.Retention.ToString("N2", Inv)
+            + (calc.TdsPct > 0 ? $" + TDS {calc.Tds:N2}" : "")
+            + (calc.CessPct > 0 ? $" + cess {calc.Cess:N2}" : "")
+            + (calc.GstTdsPct > 0 ? $" + GST-TDS {calc.GstTds:N2}" : "")
+            + (calc.OtherDeductions != 0 ? $" + other {calc.OtherDeductions:N2}" : "")
+            + (calc.AdvanceRecovery != 0 ? $" + advance {calc.AdvanceRecovery:N2}" : "");
+        NetText.Text = "Net payable: " + calc.Net.ToString("N2", Inv);
         RowFor(_current!)?.Refresh();
     }
 
@@ -196,7 +219,12 @@ public sealed partial class AccountsPage : Page
     private void NewBill_Click(object sender, RoutedEventArgs e)
     {
         SaveBill();
-        var b = new RunningBill();
+        var b = new RunningBill
+        {
+            IssuedByRole = ProjectStore.Current.Parties.Active,
+            // Typical Indian works-contract defaults; editable per bill.
+            GstPct = 18, TdsPct = 1, CessPct = 1, GstTdsPct = 0
+        };
         _book.Bills.Add(b);
         var row = new BillRow(_book, b, Company);
         _billRows.Add(row);
@@ -352,7 +380,11 @@ public sealed partial class AccountsPage : Page
 
     private void AddTxn(CashKind kind)
     {
-        var t = new CashTxn { Kind = kind, Account = CashAccount.Bank, Date = DateTime.Today };
+        var t = new CashTxn
+        {
+            Kind = kind, Account = CashAccount.Bank, Date = DateTime.Today,
+            IssuedByRole = ProjectStore.Current.Parties.Active
+        };
         _book.Transactions.Add(t);
         _txnRows.Add(new TxnRowVm(t, RefreshCash));
         RefreshCash();
@@ -375,7 +407,10 @@ public sealed partial class AccountsPage : Page
     private void RefreshLedgerParties()
     {
         var sel = LedgerPartyBox.SelectedItem as string;
-        var parties = _book.Parties().ToList();
+        var set = new SortedSet<string>(_book.Parties(), StringComparer.OrdinalIgnoreCase);
+        foreach (var c in ProjectStore.Current.ContractBook.Contracts)
+            if (!string.IsNullOrWhiteSpace(c.ContractorName)) set.Add(c.ContractorName.Trim());
+        var parties = set.ToList();
         LedgerPartyBox.ItemsSource = parties;
         if (sel is not null && parties.Contains(sel)) LedgerPartyBox.SelectedItem = sel;
         else if (parties.Count > 0) LedgerPartyBox.SelectedIndex = 0;
@@ -393,16 +428,98 @@ public sealed partial class AccountsPage : Page
             LedgerSummary.Text = "Select a party to see its statement.";
             return;
         }
-        double bal = 0, rec = 0, pay = 0;
-        foreach (var t in _book.Transactions.Where(x => x.Party.Trim().Equals(party, StringComparison.OrdinalIgnoreCase))
-                     .OrderBy(x => x.Date))
+
+        bool Match(string? s) => (s ?? "").Trim().Equals(party, StringComparison.OrdinalIgnoreCase);
+
+        // Contract / work-order value awarded to this contractor.
+        double orderValue = ProjectStore.Current.ContractBook.Contracts
+            .Where(c => Match(c.ContractorName)).Sum(c => c.Value);
+
+        // Dated events: certified bills raise what we owe (due); payments settle it.
+        var events = new List<(DateTime date, string particular, double due, double paid)>();
+        double certifiedNet = 0, paid = 0, retentionHeld = 0;
+
+        foreach (var b in _book.Bills.Where(x => x.Certified && Match(x.Party)).OrderBy(x => x.Date))
         {
-            double r = t.Kind == CashKind.Receipt ? t.Amount : 0;
-            double p = t.Kind == CashKind.Payment ? t.Amount : 0;
-            bal += r - p; rec += r; pay += p;
-            _ledgerRows.Add(new LedgerRowVm(t.Date, string.IsNullOrWhiteSpace(t.Description) ? t.Category : t.Description, r, p, bal));
+            string num = string.IsNullOrWhiteSpace(b.Number) ? "" : $" · {b.Number}";
+            events.Add((b.Date, $"RA {b.BillNo} certified{num}", b.Net, 0));
+            certifiedNet += b.Net;
+            retentionHeld += b.Retention;
         }
-        LedgerSummary.Text = $"{party}:  receipts {rec:N2} · payments {pay:N2} · net {bal:N2}";
+        foreach (var t in _book.Transactions.Where(x => Match(x.Party)).OrderBy(x => x.Date))
+        {
+            string desc = string.IsNullOrWhiteSpace(t.Description)
+                ? (string.IsNullOrWhiteSpace(t.Category) ? "Cash entry" : t.Category) : t.Description;
+            if (t.Kind == CashKind.Payment)
+            {
+                events.Add((t.Date, "Paid: " + desc, 0, t.Amount));
+                paid += t.Amount;
+            }
+            else
+            {
+                // Receipt from the contractor (e.g. refund / recovery) reduces what we owe.
+                events.Add((t.Date, "Received: " + desc, -t.Amount, 0));
+                certifiedNet -= t.Amount;
+            }
+        }
+
+        double bal = 0;
+        foreach (var ev in events.OrderBy(x => x.date))
+        {
+            bal += ev.due - ev.paid;
+            _ledgerRows.Add(new LedgerRowVm(ev.date, ev.particular, ev.due, ev.paid, bal));
+        }
+
+        double outstanding = certifiedNet - paid;
+        LedgerSummary.Text =
+            $"{party}:  order value {orderValue:N0} · certified (net) {certifiedNet:N0} · paid {paid:N0} · "
+            + $"retention held {retentionHeld:N0} · balance payable {outstanding:N0}";
+    }
+
+    private void IssueCertificate_Click(object sender, RoutedEventArgs e)
+    {
+        if (_current is null) { AppNotify.Info("No bill", "Select an RA bill first."); return; }
+        SaveBill();
+        var b = _current;
+        if (!b.Certified)
+        {
+            AppNotify.Warning("Certify first", "Certify & number the RA bill before issuing a payment certificate.");
+            return;
+        }
+        string billRef = string.IsNullOrWhiteSpace(b.Number) ? $"RA {b.BillNo}" : b.Number;
+        var body = new System.Text.StringBuilder();
+        body.AppendLine("This is to certify that the work covered by the above running-account bill has been measured");
+        body.AppendLine("and checked, and the following amount is certified as due and payable to the contractor:");
+        body.AppendLine();
+        body.AppendLine($"Gross value of work done      : Rs. {b.Gross:N2}");
+        if (b.GstPct != 0) body.AppendLine($"Add: GST @ {b.GstPct:0.#}%            : Rs. {b.Gst:N2}");
+        body.AppendLine($"Less: Retention @ {b.RetentionPct:0.#}%     : Rs. {b.Retention:N2}");
+        if (b.TdsPct != 0) body.AppendLine($"Less: TDS 194C @ {b.TdsPct:0.#}%       : Rs. {b.Tds:N2}");
+        if (b.CessPct != 0) body.AppendLine($"Less: Labour cess @ {b.CessPct:0.#}%    : Rs. {b.Cess:N2}");
+        if (b.GstTdsPct != 0) body.AppendLine($"Less: GST-TDS @ {b.GstTdsPct:0.#}%      : Rs. {b.GstTds:N2}");
+        if (b.OtherDeductions != 0) body.AppendLine($"Less: Other deductions        : Rs. {b.OtherDeductions:N2}");
+        if (b.AdvanceRecovery != 0) body.AppendLine($"Less: Advance recovery        : Rs. {b.AdvanceRecovery:N2}");
+        body.AppendLine();
+        body.AppendLine($"Net amount certified for payment : Rs. {b.Net:N2}");
+        body.AppendLine();
+        body.AppendLine("Payment may be released to the contractor accordingly.");
+
+        var pm = ProjectStore.Current.Parties.Pm;
+        var doc = new OfficeDocument
+        {
+            TypeCode = "IPC",
+            IssuedByRole = PartyRole.PM,   // certification is a PM function
+            IssueDate = DateTime.Today,
+            ToName = b.Party,
+            Subject = $"Interim Payment Certificate against RA Bill {(b.BillNo > 0 ? "No. " + b.BillNo + " " : "")}({billRef})",
+            Body = body.ToString(),
+            SignatoryName = pm.SignatoryName,
+            SignatoryRole = string.IsNullOrWhiteSpace(pm.SignatoryRole) ? "Project Manager" : pm.SignatoryRole
+        };
+        ProjectStore.Current.Office.Documents.Add(doc);
+        ProjectStore.Current.Notify();
+        AppNotify.Success("Payment certificate created",
+            $"IPC for {billRef} added under Office → Correspondence (draft). Open it there to review, then Finalize to assign a PM number.");
     }
 }
 

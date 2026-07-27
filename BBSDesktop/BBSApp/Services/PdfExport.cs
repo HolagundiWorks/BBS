@@ -316,12 +316,21 @@ public static class PdfExport
         try
         {
             var info = store.Info;
+            var party = store.Parties.For(doc.IssuedByRole);
+            string company = party.CompanyDisplay(info.CompanyDisplay);
+            string address = string.IsNullOrWhiteSpace(party.Address) ? info.Address : party.Address;
+            string phone = string.IsNullOrWhiteSpace(party.Phone) ? info.ContactPhone : party.Phone;
+            string email = string.IsNullOrWhiteSpace(party.Email) ? info.ContactEmail : party.Email;
+            string regLine = string.IsNullOrWhiteSpace(party.RegistrationLine) ? info.RegistrationLine : party.RegistrationLine;
+            string? logo = party.ResolvedLogoPath ?? info.ResolvedLogoPath;
             string number = string.IsNullOrWhiteSpace(doc.Number)
                 ? store.Office.PreviewNumber(doc, info.CompanyDisplay) + "  (draft)"
                 : doc.Number;
             string typeName = DocTypeInfo.DisplayFor(doc.TypeCode);
-            string signName = string.IsNullOrWhiteSpace(doc.SignatoryName) ? info.PreparedByName : doc.SignatoryName;
-            string signRole = string.IsNullOrWhiteSpace(doc.SignatoryRole) ? info.PreparedByRole : doc.SignatoryRole;
+            string signName = !string.IsNullOrWhiteSpace(doc.SignatoryName) ? doc.SignatoryName
+                : !string.IsNullOrWhiteSpace(party.SignatoryName) ? party.SignatoryName : info.PreparedByName;
+            string signRole = !string.IsNullOrWhiteSpace(doc.SignatoryRole) ? doc.SignatoryRole
+                : !string.IsNullOrWhiteSpace(party.SignatoryRole) ? party.SignatoryRole : info.PreparedByRole;
             bool hasTo = DocTypeInfo.HasRecipient(doc.TypeCode) && !string.IsNullOrWhiteSpace(doc.ToName);
 
             Document.Create(container =>
@@ -339,20 +348,19 @@ public static class PdfExport
                         // Letterhead
                         col.Item().Row(row =>
                         {
-                            var logoPath = info.ResolvedLogoPath;
-                            if (logoPath is not null)
-                                row.ConstantItem(64).Height(52).PaddingRight(10).AlignMiddle().Image(logoPath).FitArea();
+                            if (logo is not null)
+                                row.ConstantItem(64).Height(52).PaddingRight(10).AlignMiddle().Image(logo).FitArea();
                             row.RelativeItem().Column(c =>
                             {
-                                c.Item().Text(info.CompanyDisplay).SemiBold().FontSize(16);
-                                if (!string.IsNullOrWhiteSpace(info.Address))
-                                    c.Item().Text(info.Address).FontSize(8).FontColor(Colors.Grey.Darken2);
+                                c.Item().Text(company).SemiBold().FontSize(16);
+                                if (!string.IsNullOrWhiteSpace(address))
+                                    c.Item().Text(address).FontSize(8).FontColor(Colors.Grey.Darken2);
                                 var bits = new List<string>();
-                                if (!string.IsNullOrWhiteSpace(info.ContactPhone)) bits.Add(info.ContactPhone);
-                                if (!string.IsNullOrWhiteSpace(info.ContactEmail)) bits.Add(info.ContactEmail);
+                                if (!string.IsNullOrWhiteSpace(phone)) bits.Add(phone);
+                                if (!string.IsNullOrWhiteSpace(email)) bits.Add(email);
                                 if (bits.Count > 0) c.Item().Text(string.Join("  ·  ", bits)).FontSize(8).FontColor(Colors.Grey.Darken2);
-                                if (!string.IsNullOrWhiteSpace(info.RegistrationLine))
-                                    c.Item().Text(info.RegistrationLine).FontSize(8).FontColor(Colors.Grey.Darken1);
+                                if (!string.IsNullOrWhiteSpace(regLine))
+                                    c.Item().Text(regLine).FontSize(8).FontColor(Colors.Grey.Darken1);
                             });
                         });
                         col.Item().PaddingVertical(2).LineHorizontal(1.5f).LineColor(Colors.Grey.Darken1);
@@ -398,7 +406,7 @@ public static class PdfExport
                         // Signature
                         col.Item().PaddingTop(28).AlignRight().Column(c =>
                         {
-                            c.Item().Text($"For {info.CompanyDisplay}").SemiBold();
+                            c.Item().Text($"For {company}").SemiBold();
                             c.Item().Height(34);
                             if (!string.IsNullOrWhiteSpace(signName)) c.Item().Text(signName).SemiBold();
                             if (!string.IsNullOrWhiteSpace(signRole)) c.Item().Text(signRole).FontSize(9).FontColor(Colors.Grey.Darken2);
@@ -421,6 +429,8 @@ public static class PdfExport
         try
         {
             var info = store.Info;
+            var party = store.Parties.For(c.IssuedByRole);
+            string company = party.CompanyDisplay(info.CompanyDisplay);
             string number = string.IsNullOrWhiteSpace(c.Number)
                 ? store.ContractBook.PreviewNumber(c, info.CompanyDisplay) + "  (draft)"
                 : c.Number;
@@ -433,7 +443,7 @@ public static class PdfExport
                     page.Size(PageSizes.A4);
                     page.Margin(36);
                     page.DefaultTextStyle(x => x.FontSize(10).FontFamily(Fonts.Calibri));
-                    page.Header().Element(cc => ReportHeader(cc, store, kind));
+                    page.Header().Element(cc => PartyHeader(cc, store, party, kind));
                     page.Footer().Element(cc => ReportFooter(cc, store));
                     page.Content().Column(col =>
                     {
@@ -486,7 +496,7 @@ public static class PdfExport
                         {
                             r.RelativeItem().Column(cc =>
                             {
-                                cc.Item().Text("For " + info.CompanyDisplay).SemiBold();
+                                cc.Item().Text("For " + company).SemiBold();
                                 cc.Item().Height(30);
                                 cc.Item().Text("Authorised signatory").FontSize(9).FontColor(Colors.Grey.Darken2);
                             });
@@ -515,6 +525,9 @@ public static class PdfExport
         try
         {
             var info = store.Info;
+            var party = store.Parties.For(b.IssuedByRole);
+            var certParty = store.Parties.Pm;   // the PM certifies the contractor's bill
+            string measuredBy = !string.IsNullOrWhiteSpace(party.SignatoryName) ? party.SignatoryName : info.PreparedByName;
             string number = string.IsNullOrWhiteSpace(b.Number)
                 ? store.Accounts.PreviewBillNumber(b, info.CompanyDisplay) + "  (draft)"
                 : b.Number;
@@ -527,7 +540,7 @@ public static class PdfExport
                     page.Size(PageSizes.A4);
                     page.Margin(32);
                     page.DefaultTextStyle(x => x.FontSize(10).FontFamily(Fonts.Calibri));
-                    page.Header().Element(cc => ReportHeader(cc, store, raNo));
+                    page.Header().Element(cc => PartyHeader(cc, store, party, raNo));
                     page.Footer().Element(cc => ReportFooter(cc, store));
                     page.Content().Column(col =>
                     {
@@ -562,7 +575,12 @@ public static class PdfExport
                                 });
                             }
                             Line("Gross value of work done", b.Gross);
+                            if (b.GstPct != 0) Line($"Add: GST @ {b.GstPct:0.#}%", b.Gst);
+                            if (b.GstPct != 0) Line("Invoice total (incl. GST)", b.Invoice, strong: true);
                             Line($"Less: Retention @ {b.RetentionPct:0.#}%", -b.Retention);
+                            if (b.TdsPct != 0) Line($"Less: TDS (194C) @ {b.TdsPct:0.#}%", -b.Tds);
+                            if (b.CessPct != 0) Line($"Less: Labour cess @ {b.CessPct:0.#}%", -b.Cess);
+                            if (b.GstTdsPct != 0) Line($"Less: GST-TDS @ {b.GstTdsPct:0.#}%", -b.GstTds);
                             if (b.OtherDeductions != 0) Line("Less: Other deductions", -b.OtherDeductions);
                             if (b.AdvanceRecovery != 0) Line("Less: Advance recovery", -b.AdvanceRecovery);
                             c.Item().PaddingVertical(2).LineHorizontal(1).LineColor(Colors.Grey.Medium);
@@ -575,11 +593,11 @@ public static class PdfExport
                             {
                                 cc.Item().Text("Prepared / measured by").FontSize(9).FontColor(Colors.Grey.Darken2);
                                 cc.Item().Height(28);
-                                cc.Item().Text(info.PreparedByName).FontSize(9);
+                                cc.Item().Text(measuredBy).FontSize(9);
                             });
                             r.RelativeItem().AlignRight().Column(cc =>
                             {
-                                cc.Item().Text("Certified for payment — for " + info.CompanyDisplay).SemiBold();
+                                cc.Item().Text("Certified for payment — for " + certParty.CompanyDisplay(info.CompanyDisplay)).SemiBold();
                                 cc.Item().Height(28);
                                 cc.Item().Text("Authorised signatory").FontSize(9).FontColor(Colors.Grey.Darken2);
                             });
@@ -874,6 +892,50 @@ public static class PdfExport
                     if (!string.IsNullOrWhiteSpace(info.ClientName))
                         c.Item().Text($"Client: {info.ClientName}").FontSize(8).FontColor(Colors.Grey.Darken1);
                     c.Item().Text(info.PreparedByLine).FontSize(8).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(DateTime.Now.ToString("dd MMM yyyy HH:mm")).FontSize(7).FontColor(Colors.Grey.Darken1);
+                });
+            });
+            col.Item().PaddingTop(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
+        });
+    }
+
+    /// <summary>Report header branded with a specific persona (issuing party) instead of the project company.</summary>
+    private static void PartyHeader(IContainer container, ProjectStore store, Party party, string subtitle)
+    {
+        var info = store.Info;
+        string company = party.CompanyDisplay(info.CompanyDisplay);
+        string address = string.IsNullOrWhiteSpace(party.Address) ? info.Address : party.Address;
+        string phone = string.IsNullOrWhiteSpace(party.Phone) ? info.ContactPhone : party.Phone;
+        string email = string.IsNullOrWhiteSpace(party.Email) ? info.ContactEmail : party.Email;
+        string reg = string.IsNullOrWhiteSpace(party.RegistrationLine) ? info.RegistrationLine : party.RegistrationLine;
+        string? logoPath = party.ResolvedLogoPath ?? info.ResolvedLogoPath;
+        container.Column(col =>
+        {
+            col.Item().Row(row =>
+            {
+                if (logoPath is not null)
+                    row.ConstantItem(52).Height(40).PaddingRight(8).AlignMiddle().Image(logoPath).FitArea();
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text(company).SemiBold().FontSize(12);
+                    c.Item().Text($"{party.Role.Display()} · {subtitle}").FontSize(9).FontColor(Colors.Grey.Darken2);
+                    var bits = new List<string>();
+                    if (!string.IsNullOrWhiteSpace(phone)) bits.Add(phone);
+                    if (!string.IsNullOrWhiteSpace(email)) bits.Add(email);
+                    if (bits.Count > 0)
+                        c.Item().Text(string.Join(" · ", bits)).FontSize(7).FontColor(Colors.Grey.Darken1);
+                    if (!string.IsNullOrWhiteSpace(address))
+                        c.Item().Text(address).FontSize(7).FontColor(Colors.Grey.Darken1);
+                    if (!string.IsNullOrWhiteSpace(reg))
+                        c.Item().Text(reg).FontSize(7).FontColor(Colors.Grey.Darken1);
+                });
+                row.ConstantItem(200).AlignRight().Column(c =>
+                {
+                    c.Item().Text(info.Name).SemiBold().FontSize(10);
+                    if (!string.IsNullOrWhiteSpace(info.Location))
+                        c.Item().Text(info.Location).FontSize(8).FontColor(Colors.Grey.Darken1);
+                    if (!string.IsNullOrWhiteSpace(info.ClientName))
+                        c.Item().Text($"Client: {info.ClientName}").FontSize(8).FontColor(Colors.Grey.Darken1);
                     c.Item().Text(DateTime.Now.ToString("dd MMM yyyy HH:mm")).FontSize(7).FontColor(Colors.Grey.Darken1);
                 });
             });

@@ -40,6 +40,7 @@ public sealed partial class MainWindow : Window
         BuildRibbonTabs();
         SelectTab("project");
         NavigateTo("dashboard");
+        UpdatePersonaBadge();
         SetWindowTitle(Branding.WindowTitle(ProjectStore.Current.Name, ProjectStore.Current.IsDirty));
         AppNotify.Raised += OnAppNotify;
         ProjectStore.Current.Changed += OnStoreChanged;
@@ -55,7 +56,10 @@ public sealed partial class MainWindow : Window
     private void OnStoreChanged()
     {
         DispatcherQueue.TryEnqueue(() =>
-            SetWindowTitle(Branding.WindowTitle(ProjectStore.Current.Name, ProjectStore.Current.IsDirty)));
+        {
+            SetWindowTitle(Branding.WindowTitle(ProjectStore.Current.Name, ProjectStore.Current.IsDirty));
+            UpdatePersonaBadge();
+        });
     }
 
     private void Window_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -134,29 +138,29 @@ public sealed partial class MainWindow : Window
         }));
         _tabs.Add(new RibbonTab("contracts", "Contracts", new[]
         {
-            Cmd("contracts_list", "Contracts", Glyph("")),
-            Cmd("contracts_rates", "Rate schedule", Glyph("")),
-            Cmd("contracts_terms", "Terms", Glyph("")),
+            Cmd("contracts_list", "Contracts", Glyph("")),
+            Cmd("contracts_rates", "Rate schedule", Glyph("")),
+            Cmd("contracts_terms", "Terms", Glyph("")),
         }));
         _tabs.Add(new RibbonTab("accounts", "Accounts", new[]
         {
-            Cmd("accounts_bills", "Running bills", Glyph("")),
-            Cmd("accounts_cash", "Cash book", Glyph("")),
-            Cmd("accounts_ledger", "Ledger", Glyph("")),
+            Cmd("accounts_bills", "Running bills", Glyph("")),
+            Cmd("accounts_cash", "Cash book", Glyph("")),
+            Cmd("accounts_ledger", "Ledger", Glyph("")),
         }));
         _tabs.Add(new RibbonTab("stores", "Stores", new[]
         {
-            Cmd("stores_po", "Purchase orders", Glyph("")),
-            Cmd("stores_grn", "Goods receipt", Glyph("")),
-            Cmd("stores_inventory", "Inventory", Glyph("")),
-            Cmd("stores_masters", "Masters", Glyph("")),
+            Cmd("stores_po", "Purchase orders", Glyph("")),
+            Cmd("stores_grn", "Goods receipt", Glyph("")),
+            Cmd("stores_inventory", "Inventory", Glyph("")),
+            Cmd("stores_masters", "Masters", Glyph("")),
         }));
         _tabs.Add(new RibbonTab("hr", "HR & resources", new[]
         {
-            Cmd("org_sites", "Sites", Glyph("")),
-            Cmd("org_resources", "Resources", Glyph("")),
-            Cmd("org_employees", "Employees", Glyph("")),
-            Cmd("org_payroll", "Payroll", Glyph("")),
+            Cmd("org_sites", "Sites", Glyph("")),
+            Cmd("org_resources", "Resources", Glyph("")),
+            Cmd("org_employees", "Employees", Glyph("")),
+            Cmd("org_payroll", "Payroll", Glyph("")),
         }));
         _tabs.Add(new RibbonTab("outputs", "Outputs", new[]
         {
@@ -637,6 +641,16 @@ public sealed partial class MainWindow : Window
         NavigateTo(tag);
     }
 
+    // ——— Persona badge (read-only; declared under File → Project settings) ———
+
+    private void UpdatePersonaBadge()
+    {
+        if (PersonaBadgeText is null) return;
+        var p = ProjectStore.Current.Parties.ActiveParty;
+        string who = string.IsNullOrWhiteSpace(p.Company) ? p.Role.Display() : p.Company;
+        PersonaBadgeText.Text = $"{p.Role.Display()} · {who}";
+    }
+
     private void SetWindowTitle(string text)
     {
         Title = text;
@@ -724,6 +738,7 @@ public sealed partial class MainWindow : Window
     {
         ProjectStore.Current.Reset();
         RefreshWindowTitle();
+        UpdatePersonaBadge();
         SelectNavTag("dashboard");
     }
 
@@ -744,6 +759,7 @@ public sealed partial class MainWindow : Window
         ProjectStore.Current.LoadFrom(root);
         ProjectStore.Current.FilePath = file.Path;
         RefreshWindowTitle();
+        UpdatePersonaBadge();
         SelectNavTag("dashboard");
         AppNotify.Success("Project opened", ProjectStore.Current.Name);
     }

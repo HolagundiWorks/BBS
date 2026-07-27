@@ -149,11 +149,15 @@ public sealed partial class CorrespondencePage : Page
     {
         SaveEditor();
         string code = (NewTypeBox.SelectedItem as DocTypeInfo)?.Code ?? "LTR";
+        var active = ProjectStore.Current.Parties.ActiveParty;
         var doc = new OfficeDocument
         {
             TypeCode = code,
+            IssuedByRole = active.Role,
             IssueDate = DateTime.Today,
-            Body = DocTypeInfo.DefaultBody(code)
+            Body = DocTypeInfo.DefaultBody(code),
+            SignatoryName = active.SignatoryName,
+            SignatoryRole = active.SignatoryRole
         };
         _reg.Documents.Add(doc);
         var row = new OfficeDocRow(_reg, doc, Company);

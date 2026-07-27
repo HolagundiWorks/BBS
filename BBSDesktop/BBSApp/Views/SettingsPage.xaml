@@ -111,6 +111,75 @@
                         </StackPanel>
 
                         <StackPanel Spacing="4">
+                            <TextBlock Text="Personas (letters, bills &amp; orders)" Style="{StaticResource SectionHeaderStyle}"/>
+                            <Border Style="{StaticResource FluentCardStyle}">
+                                <StackPanel Spacing="{StaticResource SpacingS}">
+                                    <ComboBox x:Name="PersonaActiveBox"
+                                              Header="This project is operated as"
+                                              MinWidth="220"
+                                              ToolTipService.ToolTip="Whose letterhead &amp; numbering new letters, bills and work orders use"
+                                              AutomationProperties.Name="Operated as persona">
+                                        <ComboBoxItem Content="Project Manager (PMC)" Tag="pm"/>
+                                        <ComboBoxItem Content="Contractor" Tag="contractor"/>
+                                    </ComboBox>
+                                    <TextBlock Style="{StaticResource CaptionSecondaryStyle}"
+                                               TextWrapping="Wrap"
+                                               Text="Each persona keeps its own letterhead and numbering series (e.g. PMC/LTR/… vs CON/RA/…). Documents you create are branded and numbered from the persona selected above."/>
+
+                                    <TextBlock Text="Project Manager identity"
+                                               Style="{StaticResource BodyStrongStyle}" Margin="0,6,0,0"/>
+                                    <TextBox x:Name="PmCompanyBox" Header="Company / firm"
+                                             PlaceholderText="PMC / consulting firm"/>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="PmSignNameBox" Grid.Column="0" Header="Signatory name"/>
+                                        <TextBox x:Name="PmSignRoleBox" Grid.Column="1" Header="Designation"
+                                                 PlaceholderText="Project Manager"/>
+                                    </Grid>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="PmGstinBox" Grid.Column="0" Header="GSTIN"/>
+                                        <TextBox x:Name="PmPanBox" Grid.Column="1" Header="PAN"/>
+                                        <TextBox x:Name="PmPrefixBox" Grid.Column="2" Header="Prefix" Width="90"
+                                                 PlaceholderText="PMC"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Contractor identity"
+                                               Style="{StaticResource BodyStrongStyle}" Margin="0,8,0,0"/>
+                                    <TextBox x:Name="ConCompanyBox" Header="Company / firm"
+                                             PlaceholderText="Contractor firm"/>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="ConSignNameBox" Grid.Column="0" Header="Signatory name"/>
+                                        <TextBox x:Name="ConSignRoleBox" Grid.Column="1" Header="Designation"
+                                                 PlaceholderText="Proprietor"/>
+                                    </Grid>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="ConGstinBox" Grid.Column="0" Header="GSTIN"/>
+                                        <TextBox x:Name="ConPanBox" Grid.Column="1" Header="PAN"/>
+                                        <TextBox x:Name="ConPrefixBox" Grid.Column="2" Header="Prefix" Width="90"
+                                                 PlaceholderText="CON"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
                             <TextBlock Text="Logo" Style="{StaticResource SectionHeaderStyle}"/>
                             <Border Style="{StaticResource FluentCardStyle}">
                                 <StackPanel Spacing="{StaticResource SpacingS}">

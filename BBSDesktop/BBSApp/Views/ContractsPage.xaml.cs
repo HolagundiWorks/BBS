@@ -185,7 +185,11 @@ public sealed partial class ContractsPage : Page
     private void NewContract_Click(object sender, RoutedEventArgs e)
     {
         SaveContract();
-        var c = new Contract { Kind = IndexToKind(NewKindBox.SelectedIndex) };
+        var c = new Contract
+        {
+            Kind = IndexToKind(NewKindBox.SelectedIndex),
+            IssuedByRole = ProjectStore.Current.Parties.Active
+        };
         _reg.Contracts.Add(c);
         var row = new ContractRow(_reg, c, Company);
         _contractRows.Add(row);
