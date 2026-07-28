@@ -118,9 +118,26 @@
                         <StackPanel x:Name="RibbonTabPanel" Orientation="Horizontal" Spacing="0"/>
                     </ScrollViewer>
 
-                    <TextBlock x:Name="RibbonPageLabel" Grid.Column="1"
-                               VerticalAlignment="Center" Margin="12,0,0,0"
-                               Style="{StaticResource CaptionSecondaryStyle}"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                                VerticalAlignment="Center" Margin="12,0,0,0">
+                        <Border x:Name="PersonaBadge" Padding="8,2,8,2" CornerRadius="4"
+                                VerticalAlignment="Center"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                ToolTipService.ToolTip="Active persona — change under File → Project settings">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE77B;" FontSize="12" VerticalAlignment="Center"
+                                          FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                <TextBlock x:Name="PersonaBadgeText" VerticalAlignment="Center"
+                                           Style="{StaticResource CaptionSecondaryStyle}"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock x:Name="RibbonPageLabel"
+                                   VerticalAlignment="Center" Margin="6,0,0,0"
+                                   Style="{StaticResource CaptionSecondaryStyle}"/>
+                    </StackPanel>
                 </Grid>
 
                 <Border x:Name="RibbonBody" Grid.Row="1"

@@ -59,8 +59,55 @@ public sealed partial class SettingsPage : Page
         ContactPhoneBox.Text = info.ContactPhone;
         ContactEmailBox.Text = info.ContactEmail;
         AddressBox.Text = info.Address;
+        GstinBox.Text = info.Gstin;
+        CinBox.Text = info.Cin;
+        PanBox.Text = info.Pan;
         _pendingLogoPath = info.LogoPath ?? "";
         RefreshLogoPreview();
+        LoadPersonaFields();
+    }
+
+    private void LoadPersonaFields()
+    {
+        var parties = ProjectStore.Current.Parties;
+        parties.EnsureDefaults(ProjectStore.Current.Info);
+        PersonaActiveBox.SelectedIndex = parties.Active == PartyRole.Contractor ? 1 : 0;
+
+        PmCompanyBox.Text = parties.Pm.Company;
+        PmSignNameBox.Text = parties.Pm.SignatoryName;
+        PmSignRoleBox.Text = parties.Pm.SignatoryRole;
+        PmGstinBox.Text = parties.Pm.Gstin;
+        PmPanBox.Text = parties.Pm.Pan;
+        PmPrefixBox.Text = parties.Pm.NumberPrefix;
+
+        ConCompanyBox.Text = parties.Contractor.Company;
+        ConSignNameBox.Text = parties.Contractor.SignatoryName;
+        ConSignRoleBox.Text = parties.Contractor.SignatoryRole;
+        ConGstinBox.Text = parties.Contractor.Gstin;
+        ConPanBox.Text = parties.Contractor.Pan;
+        ConPrefixBox.Text = parties.Contractor.NumberPrefix;
+    }
+
+    private void SavePersonaFields()
+    {
+        var parties = ProjectStore.Current.Parties;
+        parties.Active = (PersonaActiveBox.SelectedItem as ComboBoxItem)?.Tag as string == "contractor"
+            ? PartyRole.Contractor
+            : PartyRole.PM;
+
+        parties.Pm.Company = (PmCompanyBox.Text ?? "").Trim();
+        parties.Pm.SignatoryName = (PmSignNameBox.Text ?? "").Trim();
+        parties.Pm.SignatoryRole = (PmSignRoleBox.Text ?? "").Trim();
+        parties.Pm.Gstin = (PmGstinBox.Text ?? "").Trim();
+        parties.Pm.Pan = (PmPanBox.Text ?? "").Trim();
+        parties.Pm.NumberPrefix = (PmPrefixBox.Text ?? "").Trim();
+
+        parties.Contractor.Company = (ConCompanyBox.Text ?? "").Trim();
+        parties.Contractor.SignatoryName = (ConSignNameBox.Text ?? "").Trim();
+        parties.Contractor.SignatoryRole = (ConSignRoleBox.Text ?? "").Trim();
+        parties.Contractor.Gstin = (ConGstinBox.Text ?? "").Trim();
+        parties.Contractor.Pan = (ConPanBox.Text ?? "").Trim();
+        parties.Contractor.NumberPrefix = (ConPrefixBox.Text ?? "").Trim();
     }
 
     private void LoadEngineeringFields()
@@ -203,8 +250,12 @@ public sealed partial class SettingsPage : Page
         info.ContactPhone = (ContactPhoneBox.Text ?? "").Trim();
         info.ContactEmail = (ContactEmailBox.Text ?? "").Trim();
         info.Address = (AddressBox.Text ?? "").Trim();
+        info.Gstin = (GstinBox.Text ?? "").Trim();
+        info.Cin = (CinBox.Text ?? "").Trim();
+        info.Pan = (PanBox.Text ?? "").Trim();
         info.LogoPath = _pendingLogoPath ?? "";
         store.Name = info.Name;
+        SavePersonaFields();
 
         store.Diameters.Clear();
         foreach (var d in list.Distinct().OrderBy(x => x))

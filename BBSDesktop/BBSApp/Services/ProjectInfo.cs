@@ -15,6 +15,12 @@ public sealed class ProjectInfo
     public string ContactPhone { get; set; } = "";
     public string ContactEmail { get; set; } = "";
     public string Address { get; set; } = "";
+    /// <summary>GST identification number (India).</summary>
+    public string Gstin { get; set; } = "";
+    /// <summary>Company / corporate identity number.</summary>
+    public string Cin { get; set; } = "";
+    /// <summary>Permanent account number (tax).</summary>
+    public string Pan { get; set; } = "";
     /// <summary>Absolute or relative path to project logo image (png/jpg).</summary>
     public string LogoPath { get; set; } = "";
 
@@ -31,6 +37,9 @@ public sealed class ProjectInfo
         ["contact_phone"] = ContactPhone,
         ["contact_email"] = ContactEmail,
         ["address"] = Address,
+        ["gstin"] = Gstin,
+        ["cin"] = Cin,
+        ["pan"] = Pan,
         ["logo_path"] = LogoPath
     };
 
@@ -46,6 +55,9 @@ public sealed class ProjectInfo
         ContactPhone = o["contact_phone"]?.GetValue<string>() ?? "";
         ContactEmail = o["contact_email"]?.GetValue<string>() ?? "";
         Address = o["address"]?.GetValue<string>() ?? "";
+        Gstin = o["gstin"]?.GetValue<string>() ?? "";
+        Cin = o["cin"]?.GetValue<string>() ?? "";
+        Pan = o["pan"]?.GetValue<string>() ?? "";
         LogoPath = o["logo_path"]?.GetValue<string>() ?? "";
     }
 
@@ -60,7 +72,23 @@ public sealed class ProjectInfo
         ContactPhone = "";
         ContactEmail = "";
         Address = "";
+        Gstin = "";
+        Cin = "";
+        Pan = "";
         LogoPath = "";
+    }
+
+    /// <summary>"GSTIN: … · CIN: … · PAN: …" for the present IDs, or empty.</summary>
+    public string RegistrationLine
+    {
+        get
+        {
+            var bits = new List<string>();
+            if (!string.IsNullOrWhiteSpace(Gstin)) bits.Add($"GSTIN: {Gstin.Trim()}");
+            if (!string.IsNullOrWhiteSpace(Cin)) bits.Add($"CIN: {Cin.Trim()}");
+            if (!string.IsNullOrWhiteSpace(Pan)) bits.Add($"PAN: {Pan.Trim()}");
+            return string.Join("  ·  ", bits);
+        }
     }
 
     public string PreparedByLine

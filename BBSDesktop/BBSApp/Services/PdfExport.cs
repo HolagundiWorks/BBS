@@ -250,6 +250,491 @@ public static class PdfExport
         }
     }
 
+    public static bool ExportSchedule(string path, ProjectStore store, out string? error)
+    {
+        error = null;
+        try
+        {
+            var schedule = store.Schedule;
+            var result = ScheduleCalculator.Compute(schedule);
+            var headers = new[] { "#", "Activity", "WBS", "Dur (d)", "Start", "Finish", "Total float", "Critical", "Preds" };
+            var rows = new List<string[]>();
+            for (int i = 0; i < schedule.Activities.Count; i++)
+            {
+                var a = schedule.Activities[i];
+                string preds = string.Join(", ", a.Links
+                    .Select(l => schedule.Find(l.PredecessorId))
+                    .Where(p => p is not null)
+                    .Select(p => schedule.IndexOf(p!).ToString()));
+                rows.Add(new[]
+                {
+                    (i + 1).ToString(),
+                    a.Name,
+                    a.Wbs,
+                    a.DurationDays.ToString("0.#"),
+                    schedule.DateForOffset(a.EarlyStart).ToString("dd MMM yyyy"),
+                    schedule.DateForOffset(a.EarlyFinish).ToString("dd MMM yyyy"),
+                    a.InCycle ? "—" : a.TotalFloat.ToString("0.#"),
+                    a.InCycle ? "cycle" : a.IsCritical ? "Yes" : "",
+                    preds
+                });
+            }
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Landscape());
+                    page.Margin(28);
+                    page.DefaultTextStyle(x => x.FontSize(9).FontFamily(Fonts.Calibri));
+                    page.Header().Element(c => ReportHeader(c, store,
+                        $"Project schedule (CPM) · {result.ProjectDurationDays:0.#} working days · finish {result.FinishDate:dd MMM yyyy}"));
+                    page.Footer().Element(c => ReportFooter(c, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(12);
+                        col.Item().Text(
+                            $"Start {schedule.StartDate:dd MMM yyyy} · {schedule.WorkingDaysPerWeek}-day week · "
+                            + $"{result.ActivityCount} activities · {result.CriticalCount} on critical path"
+                            + (result.HasCycle ? "  ·  WARNING: circular dependency present" : "")).FontSize(9);
+                        col.Item().Element(c => TableSection(c, "Activity schedule", headers, rows));
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool ExportOfficeDocument(string path, ProjectStore store, OfficeDocument doc, out string? error)
+    {
+        error = null;
+        try
+        {
+            var info = store.Info;
+            var party = store.Parties.For(doc.IssuedByRole);
+            string company = party.CompanyDisplay(info.CompanyDisplay);
+            string address = string.IsNullOrWhiteSpace(party.Address) ? info.Address : party.Address;
+            string phone = string.IsNullOrWhiteSpace(party.Phone) ? info.ContactPhone : party.Phone;
+            string email = string.IsNullOrWhiteSpace(party.Email) ? info.ContactEmail : party.Email;
+            string regLine = string.IsNullOrWhiteSpace(party.RegistrationLine) ? info.RegistrationLine : party.RegistrationLine;
+            string? logo = party.ResolvedLogoPath ?? info.ResolvedLogoPath;
+            string number = string.IsNullOrWhiteSpace(doc.Number)
+                ? store.Office.PreviewNumber(doc, info.CompanyDisplay) + "  (draft)"
+                : doc.Number;
+            string typeName = DocTypeInfo.DisplayFor(doc.TypeCode);
+            string signName = !string.IsNullOrWhiteSpace(doc.SignatoryName) ? doc.SignatoryName
+                : !string.IsNullOrWhiteSpace(party.SignatoryName) ? party.SignatoryName : info.PreparedByName;
+            string signRole = !string.IsNullOrWhiteSpace(doc.SignatoryRole) ? doc.SignatoryRole
+                : !string.IsNullOrWhiteSpace(party.SignatoryRole) ? party.SignatoryRole : info.PreparedByRole;
+            bool hasTo = DocTypeInfo.HasRecipient(doc.TypeCode) && !string.IsNullOrWhiteSpace(doc.ToName);
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(40);
+                    page.DefaultTextStyle(x => x.FontSize(11).FontFamily(Fonts.Calibri));
+                    page.Footer().Element(c => ReportFooter(c, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(10);
+
+                        // Letterhead
+                        col.Item().Row(row =>
+                        {
+                            if (logo is not null)
+                                row.ConstantItem(64).Height(52).PaddingRight(10).AlignMiddle().Image(logo).FitArea();
+                            row.RelativeItem().Column(c =>
+                            {
+                                c.Item().Text(company).SemiBold().FontSize(16);
+                                if (!string.IsNullOrWhiteSpace(address))
+                                    c.Item().Text(address).FontSize(8).FontColor(Colors.Grey.Darken2);
+                                var bits = new List<string>();
+                                if (!string.IsNullOrWhiteSpace(phone)) bits.Add(phone);
+                                if (!string.IsNullOrWhiteSpace(email)) bits.Add(email);
+                                if (bits.Count > 0) c.Item().Text(string.Join("  ·  ", bits)).FontSize(8).FontColor(Colors.Grey.Darken2);
+                                if (!string.IsNullOrWhiteSpace(regLine))
+                                    c.Item().Text(regLine).FontSize(8).FontColor(Colors.Grey.Darken1);
+                            });
+                        });
+                        col.Item().PaddingVertical(2).LineHorizontal(1.5f).LineColor(Colors.Grey.Darken1);
+
+                        // Number / date
+                        col.Item().PaddingTop(6).Row(row =>
+                        {
+                            row.RelativeItem().Text(t => { t.Span("No: ").SemiBold(); t.Span(number); });
+                            row.RelativeItem().AlignRight().Text(t =>
+                            {
+                                t.Span("Date: ").SemiBold();
+                                t.Span(doc.IssueDate.ToString("dd MMM yyyy"));
+                            });
+                        });
+
+                        // Recipient
+                        if (hasTo)
+                        {
+                            col.Item().PaddingTop(6).Text("To,").SemiBold();
+                            col.Item().Text(doc.ToName);
+                            foreach (var line in SplitLines(doc.ToAddress))
+                                col.Item().Text(line);
+                        }
+
+                        // Subject / title
+                        col.Item().PaddingTop(10).AlignCenter().Text($"{typeName}".ToUpperInvariant())
+                            .SemiBold().FontSize(12).FontColor(Colors.Grey.Darken2);
+                        if (!string.IsNullOrWhiteSpace(doc.Subject))
+                            col.Item().PaddingTop(2).Text(t =>
+                            {
+                                t.Span("Subject: ").SemiBold();
+                                t.Span(doc.Subject).SemiBold();
+                            });
+
+                        // Body
+                        col.Item().PaddingTop(10);
+                        foreach (var line in SplitLines(doc.Body))
+                        {
+                            if (line.Length == 0) col.Item().Height(6);
+                            else col.Item().Text(line).LineHeight(1.35f);
+                        }
+
+                        // Signature
+                        col.Item().PaddingTop(28).AlignRight().Column(c =>
+                        {
+                            c.Item().Text($"For {company}").SemiBold();
+                            c.Item().Height(34);
+                            if (!string.IsNullOrWhiteSpace(signName)) c.Item().Text(signName).SemiBold();
+                            if (!string.IsNullOrWhiteSpace(signRole)) c.Item().Text(signRole).FontSize(9).FontColor(Colors.Grey.Darken2);
+                        });
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool ExportContract(string path, ProjectStore store, Contract c, out string? error)
+    {
+        error = null;
+        try
+        {
+            var info = store.Info;
+            var party = store.Parties.For(c.IssuedByRole);
+            string company = party.CompanyDisplay(info.CompanyDisplay);
+            string number = string.IsNullOrWhiteSpace(c.Number)
+                ? store.ContractBook.PreviewNumber(c, info.CompanyDisplay) + "  (draft)"
+                : c.Number;
+            string kind = Contract.KindDisplay(c.Kind);
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(36);
+                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily(Fonts.Calibri));
+                    page.Header().Element(cc => PartyHeader(cc, store, party, kind));
+                    page.Footer().Element(cc => ReportFooter(cc, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(6);
+                        col.Item().Row(r =>
+                        {
+                            r.RelativeItem().Text(t => { t.Span("No: ").SemiBold(); t.Span(number); });
+                            r.RelativeItem().AlignRight().Text(t => { t.Span("Award date: ").SemiBold(); t.Span(c.AwardDate.ToString("dd MMM yyyy")); });
+                        });
+                        col.Item().Text(t => { t.Span("Completion by: ").SemiBold(); t.Span(c.CompletionDate.ToString("dd MMM yyyy")); });
+                        if (!string.IsNullOrWhiteSpace(c.Title))
+                            col.Item().PaddingTop(4).Text(c.Title).SemiBold().FontSize(12);
+
+                        col.Item().PaddingTop(6).Text("To (Contractor):").SemiBold();
+                        col.Item().Text(string.IsNullOrWhiteSpace(c.ContractorName) ? "—" : c.ContractorName);
+                        foreach (var line in SplitLines(c.ContractorAddress)) if (line.Length > 0) col.Item().Text(line);
+
+                        if (!string.IsNullOrWhiteSpace(c.Scope))
+                        {
+                            col.Item().PaddingTop(6).Text("Scope of work:").SemiBold();
+                            foreach (var line in SplitLines(c.Scope)) col.Item().Text(line.Length == 0 ? " " : line);
+                        }
+
+                        if (c.IsItemRate && c.Lines.Count > 0)
+                        {
+                            var headers = new[] { "#", "Description", "Unit", "Qty", "Rate", "Amount" };
+                            var rows = new List<string[]>();
+                            int i = 1;
+                            foreach (var l in c.Lines)
+                                rows.Add(new[] { (i++).ToString(), l.Description, l.Unit,
+                                    l.Qty.ToString("0.##"), l.Rate.ToString("0.##"), l.Amount.ToString("0.##") });
+                            col.Item().PaddingTop(8).Element(cc => TableSection(cc, "Schedule of quantities & rates", headers, rows));
+                            col.Item().AlignRight().Text(t => { t.Span("Contract value: ").SemiBold(); t.Span("Rs. " + c.Value.ToString("N2")); });
+                        }
+                        else
+                        {
+                            col.Item().PaddingTop(8).Text(t => { t.Span("Contract value (lump sum): ").SemiBold(); t.Span("Rs. " + c.Value.ToString("N2")); });
+                        }
+                        col.Item().Text(t => { t.Span("Retention: ").SemiBold(); t.Span(c.RetentionPct.ToString("0.#") + " %"); });
+
+                        if (c.Terms.Count > 0)
+                        {
+                            col.Item().PaddingTop(8).Text("Terms & conditions:").SemiBold();
+                            int n = 1;
+                            foreach (var term in c.Terms)
+                                col.Item().Text($"{n++}. {term}").LineHeight(1.3f);
+                        }
+
+                        col.Item().PaddingTop(30).Row(r =>
+                        {
+                            r.RelativeItem().Column(cc =>
+                            {
+                                cc.Item().Text("For " + company).SemiBold();
+                                cc.Item().Height(30);
+                                cc.Item().Text("Authorised signatory").FontSize(9).FontColor(Colors.Grey.Darken2);
+                            });
+                            r.RelativeItem().AlignRight().Column(cc =>
+                            {
+                                cc.Item().Text("Accepted — " + (string.IsNullOrWhiteSpace(c.ContractorName) ? "Contractor" : c.ContractorName)).SemiBold();
+                                cc.Item().Height(30);
+                                cc.Item().Text("Contractor signature").FontSize(9).FontColor(Colors.Grey.Darken2);
+                            });
+                        });
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool ExportRunningBill(string path, ProjectStore store, RunningBill b, out string? error)
+    {
+        error = null;
+        try
+        {
+            var info = store.Info;
+            var party = store.Parties.For(b.IssuedByRole);
+            var certParty = store.Parties.Pm;   // the PM certifies the contractor's bill
+            string measuredBy = !string.IsNullOrWhiteSpace(party.SignatoryName) ? party.SignatoryName : info.PreparedByName;
+            string number = string.IsNullOrWhiteSpace(b.Number)
+                ? store.Accounts.PreviewBillNumber(b, info.CompanyDisplay) + "  (draft)"
+                : b.Number;
+            string raNo = b.BillNo > 0 ? $"RA Bill No. {b.BillNo}" : "RA Bill (draft)";
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(32);
+                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily(Fonts.Calibri));
+                    page.Header().Element(cc => PartyHeader(cc, store, party, raNo));
+                    page.Footer().Element(cc => ReportFooter(cc, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(6);
+                        col.Item().Row(r =>
+                        {
+                            r.RelativeItem().Text(t => { t.Span("No: ").SemiBold(); t.Span(number); });
+                            r.RelativeItem().AlignRight().Text(t => { t.Span("Date: ").SemiBold(); t.Span(b.Date.ToString("dd MMM yyyy")); });
+                        });
+                        if (!string.IsNullOrWhiteSpace(b.ContractLabel))
+                            col.Item().Text(t => { t.Span("Against: ").SemiBold(); t.Span(b.ContractLabel); });
+                        if (!string.IsNullOrWhiteSpace(b.Party))
+                            col.Item().Text(t => { t.Span("Contractor: ").SemiBold(); t.Span(b.Party); });
+
+                        var headers = new[] { "#", "Description", "Unit", "Rate", "Qty", "Amount" };
+                        var rows = new List<string[]>();
+                        int i = 1;
+                        foreach (var l in b.Lines)
+                            rows.Add(new[] { (i++).ToString(), l.Description, l.Unit,
+                                l.Rate.ToString("0.##"), l.Qty.ToString("0.###"), l.Amount.ToString("0.##") });
+                        col.Item().PaddingTop(6).Element(cc => TableSection(cc, "Measured work", headers, rows));
+
+                        col.Item().PaddingTop(6).AlignRight().Column(c =>
+                        {
+                            void Line(string label, double val, bool strong = false)
+                            {
+                                c.Item().Row(r =>
+                                {
+                                    var lab = r.ConstantItem(220).Text(label);
+                                    var amt = r.ConstantItem(120).AlignRight().Text("Rs. " + val.ToString("N2"));
+                                    if (strong) { lab.SemiBold(); amt.SemiBold(); }
+                                });
+                            }
+                            Line("Gross value of work done", b.Gross);
+                            if (b.GstPct != 0) Line($"Add: GST @ {b.GstPct:0.#}%", b.Gst);
+                            if (b.GstPct != 0) Line("Invoice total (incl. GST)", b.Invoice, strong: true);
+                            Line($"Less: Retention @ {b.RetentionPct:0.#}%", -b.Retention);
+                            if (b.TdsPct != 0) Line($"Less: TDS (194C) @ {b.TdsPct:0.#}%", -b.Tds);
+                            if (b.CessPct != 0) Line($"Less: Labour cess @ {b.CessPct:0.#}%", -b.Cess);
+                            if (b.GstTdsPct != 0) Line($"Less: GST-TDS @ {b.GstTdsPct:0.#}%", -b.GstTds);
+                            if (b.OtherDeductions != 0) Line("Less: Other deductions", -b.OtherDeductions);
+                            if (b.AdvanceRecovery != 0) Line("Less: Advance recovery", -b.AdvanceRecovery);
+                            c.Item().PaddingVertical(2).LineHorizontal(1).LineColor(Colors.Grey.Medium);
+                            Line("Net amount payable", b.Net, strong: true);
+                        });
+
+                        col.Item().PaddingTop(30).Row(r =>
+                        {
+                            r.RelativeItem().Column(cc =>
+                            {
+                                cc.Item().Text("Prepared / measured by").FontSize(9).FontColor(Colors.Grey.Darken2);
+                                cc.Item().Height(28);
+                                cc.Item().Text(measuredBy).FontSize(9);
+                            });
+                            r.RelativeItem().AlignRight().Column(cc =>
+                            {
+                                cc.Item().Text("Certified for payment — for " + certParty.CompanyDisplay(info.CompanyDisplay)).SemiBold();
+                                cc.Item().Height(28);
+                                cc.Item().Text("Authorised signatory").FontSize(9).FontColor(Colors.Grey.Darken2);
+                            });
+                        });
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool ExportStorePurchaseOrder(string path, ProjectStore store, PurchaseOrder po, out string? error)
+    {
+        error = null;
+        try
+        {
+            var info = store.Info;
+            string number = string.IsNullOrWhiteSpace(po.Number)
+                ? store.Stores.Preview("PO", po.Date, info.CompanyDisplay) + "  (draft)"
+                : po.Number;
+            string wh = store.Stores.WarehouseName(po.WarehouseId);
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(32);
+                    page.DefaultTextStyle(x => x.FontSize(10).FontFamily(Fonts.Calibri));
+                    page.Header().Element(cc => ReportHeader(cc, store, "Purchase order"));
+                    page.Footer().Element(cc => ReportFooter(cc, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(6);
+                        col.Item().Row(r =>
+                        {
+                            r.RelativeItem().Text(t => { t.Span("PO No: ").SemiBold(); t.Span(number); });
+                            r.RelativeItem().AlignRight().Text(t => { t.Span("Date: ").SemiBold(); t.Span(po.Date.ToString("dd MMM yyyy")); });
+                        });
+                        col.Item().Text(t => { t.Span("To (Supplier): ").SemiBold(); t.Span(string.IsNullOrWhiteSpace(po.SupplierName) ? "—" : po.SupplierName); });
+                        col.Item().Text(t => { t.Span("Deliver to: ").SemiBold(); t.Span(wh); });
+
+                        var headers = new[] { "#", "Material", "Unit", "Qty", "Rate", "Amount" };
+                        var rows = new List<string[]>();
+                        int i = 1;
+                        foreach (var l in po.Lines)
+                            rows.Add(new[] { (i++).ToString(), l.Material, l.Unit,
+                                l.Qty.ToString("0.###"), l.Rate.ToString("0.##"), l.Amount.ToString("0.##") });
+                        col.Item().PaddingTop(6).Element(cc => TableSection(cc, "Ordered materials", headers, rows));
+                        col.Item().AlignRight().Text(t => { t.Span("Order total: ").SemiBold(); t.Span("Rs. " + po.Total.ToString("N2")); });
+
+                        if (!string.IsNullOrWhiteSpace(po.Notes))
+                        {
+                            col.Item().PaddingTop(6).Text("Notes / terms:").SemiBold();
+                            foreach (var line in SplitLines(po.Notes)) col.Item().Text(line.Length == 0 ? " " : line);
+                        }
+
+                        col.Item().PaddingTop(34).AlignRight().Column(cc =>
+                        {
+                            cc.Item().Text("For " + info.CompanyDisplay).SemiBold();
+                            cc.Item().Height(30);
+                            cc.Item().Text("Authorised signatory").FontSize(9).FontColor(Colors.Grey.Darken2);
+                        });
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    public static bool ExportPayroll(string path, ProjectStore store, string month, out string? error)
+    {
+        error = null;
+        try
+        {
+            var org = store.Org;
+            string monthLabel = DateTime.TryParseExact(month + "-01", "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var md)
+                ? md.ToString("MMMM yyyy") : month;
+
+            var headers = new[] { "#", "Code", "Name", "Designation", "Site", "Days", "Gross", "Advance", "Net" };
+            var rows = new List<string[]>();
+            double tg = 0, ta = 0, tn = 0;
+            int i = 1;
+            foreach (var emp in org.Employees.Where(e => e.Active))
+            {
+                var rec = org.GetPayroll(emp.Id, month);
+                double gross = org.Gross(emp, rec.DaysPresent);
+                double net = gross - rec.Advance;
+                tg += gross; ta += rec.Advance; tn += net;
+                rows.Add(new[]
+                {
+                    (i++).ToString(), emp.Code, emp.Name, emp.Designation, org.SiteName(emp.SiteId),
+                    rec.DaysPresent.ToString("0.#"), gross.ToString("N2"), rec.Advance.ToString("N2"), net.ToString("N2")
+                });
+            }
+            rows.Add(new[] { "", "", "Total", "", "", "", tg.ToString("N2"), ta.ToString("N2"), tn.ToString("N2") });
+
+            Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Landscape());
+                    page.Margin(28);
+                    page.DefaultTextStyle(x => x.FontSize(9).FontFamily(Fonts.Calibri));
+                    page.Header().Element(cc => ReportHeader(cc, store, $"Payroll register · {monthLabel}"));
+                    page.Footer().Element(cc => ReportFooter(cc, store));
+                    page.Content().Column(col =>
+                    {
+                        col.Spacing(10);
+                        col.Item().Text($"Working days basis: {org.WorkingDays:0.#} · {org.Employees.Count(e => e.Active)} active employee(s)").FontSize(9);
+                        col.Item().Element(cc => TableSection(cc, $"Wages & salaries — {monthLabel}", headers, rows));
+                    });
+                });
+            }).GeneratePdf(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private static IEnumerable<string> SplitLines(string? s) =>
+        (s ?? "").Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+
     private sealed class ReportSection
     {
         public string Title { get; init; } = "";
@@ -395,6 +880,8 @@ public static class PdfExport
                     }
                     if (!string.IsNullOrWhiteSpace(info.Address))
                         c.Item().Text(info.Address).FontSize(7).FontColor(Colors.Grey.Darken1);
+                    if (!string.IsNullOrWhiteSpace(info.RegistrationLine))
+                        c.Item().Text(info.RegistrationLine).FontSize(7).FontColor(Colors.Grey.Darken1);
                 });
 
                 row.ConstantItem(200).AlignRight().Column(c =>
@@ -405,6 +892,50 @@ public static class PdfExport
                     if (!string.IsNullOrWhiteSpace(info.ClientName))
                         c.Item().Text($"Client: {info.ClientName}").FontSize(8).FontColor(Colors.Grey.Darken1);
                     c.Item().Text(info.PreparedByLine).FontSize(8).FontColor(Colors.Grey.Darken1);
+                    c.Item().Text(DateTime.Now.ToString("dd MMM yyyy HH:mm")).FontSize(7).FontColor(Colors.Grey.Darken1);
+                });
+            });
+            col.Item().PaddingTop(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
+        });
+    }
+
+    /// <summary>Report header branded with a specific persona (issuing party) instead of the project company.</summary>
+    private static void PartyHeader(IContainer container, ProjectStore store, Party party, string subtitle)
+    {
+        var info = store.Info;
+        string company = party.CompanyDisplay(info.CompanyDisplay);
+        string address = string.IsNullOrWhiteSpace(party.Address) ? info.Address : party.Address;
+        string phone = string.IsNullOrWhiteSpace(party.Phone) ? info.ContactPhone : party.Phone;
+        string email = string.IsNullOrWhiteSpace(party.Email) ? info.ContactEmail : party.Email;
+        string reg = string.IsNullOrWhiteSpace(party.RegistrationLine) ? info.RegistrationLine : party.RegistrationLine;
+        string? logoPath = party.ResolvedLogoPath ?? info.ResolvedLogoPath;
+        container.Column(col =>
+        {
+            col.Item().Row(row =>
+            {
+                if (logoPath is not null)
+                    row.ConstantItem(52).Height(40).PaddingRight(8).AlignMiddle().Image(logoPath).FitArea();
+                row.RelativeItem().Column(c =>
+                {
+                    c.Item().Text(company).SemiBold().FontSize(12);
+                    c.Item().Text($"{party.Role.Display()} · {subtitle}").FontSize(9).FontColor(Colors.Grey.Darken2);
+                    var bits = new List<string>();
+                    if (!string.IsNullOrWhiteSpace(phone)) bits.Add(phone);
+                    if (!string.IsNullOrWhiteSpace(email)) bits.Add(email);
+                    if (bits.Count > 0)
+                        c.Item().Text(string.Join(" · ", bits)).FontSize(7).FontColor(Colors.Grey.Darken1);
+                    if (!string.IsNullOrWhiteSpace(address))
+                        c.Item().Text(address).FontSize(7).FontColor(Colors.Grey.Darken1);
+                    if (!string.IsNullOrWhiteSpace(reg))
+                        c.Item().Text(reg).FontSize(7).FontColor(Colors.Grey.Darken1);
+                });
+                row.ConstantItem(200).AlignRight().Column(c =>
+                {
+                    c.Item().Text(info.Name).SemiBold().FontSize(10);
+                    if (!string.IsNullOrWhiteSpace(info.Location))
+                        c.Item().Text(info.Location).FontSize(8).FontColor(Colors.Grey.Darken1);
+                    if (!string.IsNullOrWhiteSpace(info.ClientName))
+                        c.Item().Text($"Client: {info.ClientName}").FontSize(8).FontColor(Colors.Grey.Darken1);
                     c.Item().Text(DateTime.Now.ToString("dd MMM yyyy HH:mm")).FontSize(7).FontColor(Colors.Grey.Darken1);
                 });
             });

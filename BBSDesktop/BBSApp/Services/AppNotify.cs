@@ -22,6 +22,9 @@ public static class AppNotify
         Raised?.Invoke(new NotifyRequest(title, message ?? "", severity, durationMs));
     }
 
+    public static void Info(string title, string message = "", int durationMs = 3500) =>
+        Show(title, message, InfoBarSeverity.Informational, durationMs);
+
     public static void Success(string title, string message = "", int durationMs = 3200) =>
         Show(title, message, InfoBarSeverity.Success, durationMs);
 

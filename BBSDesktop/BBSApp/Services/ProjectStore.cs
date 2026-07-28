@@ -21,6 +21,10 @@ public sealed class ProjectStore
     /// <summary>Project identity: client, company, prepared-by, logo.</summary>
     public ProjectInfo Info { get; } = new();
 
+    /// <summary>The two operating personas (Project Manager / Contractor) + the active one.
+    /// Letters, bills, contracts and cash are branded and numbered per persona.</summary>
+    public PartyBook Parties { get; } = new();
+
     /// <summary>Estimate % add-ons: electrical, plumbing, escalation, consulting fees.</summary>
     public EstimateMarkups Markups { get; } = new();
 
@@ -70,6 +74,24 @@ public sealed class ProjectStore
 
     public CivilYields Yields { get; } = new();
     public TakeoffState Takeoff { get; } = new();
+
+    /// <summary>CPM/PERT project schedule (activities, dependencies, Gantt).</summary>
+    public ProjectSchedule Schedule { get; } = new();
+
+    /// <summary>Correspondence register: letters, memos, certificates, etc. with auto-numbering.</summary>
+    public OfficeRegister Office { get; } = new();
+
+    /// <summary>Contracts, work orders, tenders, schedule of rates, and standard terms.</summary>
+    public ContractRegister ContractBook { get; } = new();
+
+    /// <summary>Running-account bills, cash/bank transactions, ledgers.</summary>
+    public AccountsBook Accounts { get; } = new();
+
+    /// <summary>Procurement & stores: suppliers, warehouses, POs, GRNs, issues, inventory.</summary>
+    public StoresBook Stores { get; } = new();
+
+    /// <summary>Sites, resources, employees, attendance and payroll.</summary>
+    public OrgBook Org { get; } = new();
 
     /// <summary>Last calculated estimate snapshot (qty × rates).</summary>
     public EstimateResult? LastEstimate { get; set; }
@@ -203,9 +225,10 @@ public sealed class ProjectStore
         return new JsonObject
         {
             ["format"] = "bbsproj",
-            ["version"] = 9,
+            ["version"] = 16,
             ["name"] = Name,
             ["project"] = Info.ToJson(),
+            ["parties"] = Parties.ToJson(),
             ["estimate_markups"] = Markups.ToJson(),
             ["concrete_from_rmc"] = ConcreteFromRmc ? 1 : 0,
             ["settings"] = SettingsJson(),
@@ -239,6 +262,12 @@ public sealed class ProjectStore
             ["doors"] = RowsToJson(Doors),
             ["windows"] = RowsToJson(Windows),
             ["takeoff"] = Takeoff.ToJson(),
+            ["schedule"] = Schedule.ToJson(),
+            ["office"] = Office.ToJson(),
+            ["contracts"] = ContractBook.ToJson(),
+            ["accounts"] = Accounts.ToJson(),
+            ["stores"] = Stores.ToJson(),
+            ["org"] = Org.ToJson(),
             ["last_estimate"] = LastEstimate is null ? null : EstimateCalculator.ToJson(LastEstimate),
             ["last_estimate_rate_book_version_id"] = LastEstimateRateBookVersionId ?? ""
         };
@@ -260,6 +289,8 @@ public sealed class ProjectStore
     {
         Name = root["name"]?.GetValue<string>() ?? "Untitled Project";
         Info.LoadFrom(root["project"] as JsonObject);
+        // Personas load after Info so a legacy project seeds the PM identity from its own company.
+        Parties.LoadFrom(root["parties"] as JsonObject, Info);
         Markups.LoadFrom(root["estimate_markups"] as JsonObject);
         // Keep legacy root name in sync if project block missing name
         if (string.IsNullOrWhiteSpace(Info.Name) || Info.Name == "Untitled Project")
@@ -308,6 +339,12 @@ public sealed class ProjectStore
         LoadRows(root["doors"] as JsonArray, Doors);
         LoadRows(root["windows"] as JsonArray, Windows);
         Takeoff.LoadFrom(root["takeoff"] as JsonObject);
+        Schedule.LoadFrom(root["schedule"] as JsonObject);
+        Office.LoadFrom(root["office"] as JsonObject);
+        ContractBook.LoadFrom(root["contracts"] as JsonObject);
+        Accounts.LoadFrom(root["accounts"] as JsonObject);
+        Stores.LoadFrom(root["stores"] as JsonObject);
+        Org.LoadFrom(root["org"] as JsonObject);
         LastEstimate = EstimateCalculator.FromJson(root["last_estimate"] as JsonObject);
         LastEstimateRateBookVersionId = root["last_estimate_rate_book_version_id"]?.GetValue<string>();
         if (root["levels"] is JsonArray la)
@@ -511,6 +548,8 @@ public sealed class ProjectStore
     public void Reset()
     {
         Info.Reset();
+        Parties.Reset();
+        Parties.EnsureDefaults(Info);
         Markups.Reset();
         Name = Info.Name;
         FilePath = null;
@@ -522,6 +561,12 @@ public sealed class ProjectStore
         Vdf.Clear(); Skirting.Clear(); Parapet.Clear(); PlinthProtection.Clear();
         Doors.Clear(); Windows.Clear();
         Takeoff.Clear();
+        Schedule.Clear();
+        Office.Clear();
+        ContractBook.Clear();
+        Accounts.Clear();
+        Stores.Clear();
+        Org.Clear();
         Levels.Clear();
         LastSummary = null;
         LastBbs = null;
@@ -537,6 +582,9 @@ public sealed class ProjectStore
     public void SeedDefaults()
     {
         EnsureDefaultLevels();
+        ContractBook.EnsureSeeded();
+        Stores.EnsureSeeded();
+        Org.EnsureSeeded();
         double h0 = ColumnHeightFor("Lvl0");
         if (Columns.Count == 0)
             Columns.Add(new Dictionary<string, string>
