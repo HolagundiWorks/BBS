@@ -9,11 +9,11 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Version>1.1.0</Version>
-    <Company>Human Centic Works</Company>
+    <Company>Human Centric Works</Company>
     <Product>AQC-Core</Product>
-    <Authors>Human Centic Works, Hospet</Authors>
-    <Description>AQC-Core (Accelerated Quantity and Costing Core) — quantity take-off and costing for RCC, masonry, plaster, PCC and earthwork by Human Centic Works, Hospet.</Description>
-    <Copyright>Copyright © 2026 Human Centic Works, Hospet</Copyright>
+    <Authors>Human Centric Works, Hospet</Authors>
+    <Description>AQC-Core (Accelerated Quantity and Costing Core) — quantity take-off and costing for RCC, masonry, plaster, PCC and earthwork by Human Centric Works, Hospet.</Description>
+    <Copyright>Copyright © 2026 Human Centric Works, Hospet</Copyright>
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>

@@ -1,6 +1,6 @@
 # AQC-Core
 
-**AQC-Core** (*Accelerated Quantity and Costing Core*) — quantity take-off and costing by **Human Centic Works, Hospet**.
+**AQC-Core** (*Accelerated Quantity and Costing Core*) — quantity take-off and costing by **Human Centric Works, Hospet**.
 
 RCC bar bending schedules, civil BOQ, drawing takeoff, rate books, DSR-style estimates (with electrical / plumbing / escalation / consulting %), and purchase orders — plus back-office modules for project scheduling, correspondence, contracts, running-account billing, stores and HR.
 
@@ -8,7 +8,7 @@ One project can be operated as either a **Project Manager / PMC** or a **Contrac
 
 Quantities follow IS 456 / IS 1200–derived conventions — always cross-check against drawings.
 
-**Version:** 1.1.0 · **License:** [Apache License 2.0](LICENSE) · see also [NOTICE](NOTICE) · [CHANGELOG](CHANGELOG.md)
+**Version:** 1.1.0 · **License:** [AGPL-3.0](LICENSE) (Community) or [Commercial](LICENSING.md) · see also [NOTICE](NOTICE) · [CHANGELOG](CHANGELOG.md)
 
 ## Stack
 
@@ -102,8 +102,21 @@ Output: `BBSDesktop\artifacts\msix\*.msix`
 ## Branding
 
 - Product: **AQC-Core** — Accelerated Quantity and Costing Core  
-- Developer: **Human Centic Works, Hospet**  
+- Developer: **Human Centric Works, Hospet**  
 - Logo: `BBSDesktop/BBSApp/Assets/logo.png`
+
+## Licensing
+
+AQC-Core is **dual-licensed**:
+
+- **Community Edition** — [GNU AGPL v3](LICENSE). Free for individuals, hobbyists,
+  research, and internal business use. Note the AGPL's network clause: hosting a modified
+  version as a service (SaaS) requires releasing your source under the AGPL.
+- **Commercial License** — required to **resell**, **embed in a proprietary product**,
+  **offer as SaaS** without AGPL compliance, **remove the branding**, or **ship
+  closed-source modifications**.
+
+See [LICENSING.md](LICENSING.md). Commercial enquiries: **office@hcworks.in** · <https://hcworks.in>
 
 ## Disclaimer
 

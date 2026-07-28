@@ -3,6 +3,15 @@
 All notable changes to **AQC-Core** are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- **Relicensed** from Apache-2.0 to a **dual license**: GNU AGPL v3 (Community Edition) or a
+  commercial license from Human Centric Works. Free for individuals, research and internal
+  business use; a commercial license is required to resell, embed in a proprietary product,
+  offer as SaaS without AGPL compliance, remove the branding, or ship closed-source
+  modifications. See [LICENSING.md](LICENSING.md). Prior releases (1.0.x, 1.1.0) remain Apache-2.0.
+
 ## [1.1.0] — 2026-07-27
 
 Project-management & back-office modules, and dual-persona (Project Manager / Contractor) support.
@@ -49,7 +58,7 @@ Project-management & back-office modules, and dual-persona (Project Manager / Co
 ## [1.0.0] — Initial release
 
 First public **AQC-Core** (*Accelerated Quantity and Costing Core*) release,
-by Human Centic Works, Hospet.
+by Human Centric Works, Hospet.
 
 ### Added
 - C# **WinUI 3** desktop app (Fluent 2, Mica) over a C++ `bbs_engine.dll`.

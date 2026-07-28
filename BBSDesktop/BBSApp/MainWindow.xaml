@@ -37,7 +37,7 @@
                                FontSize="12"
                                FontWeight="SemiBold"
                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>
-                    <TextBlock Text="Human Centic Works · Hospet"
+                    <TextBlock Text="Human Centric Works · Hospet"
                                FontSize="10"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                 </StackPanel>

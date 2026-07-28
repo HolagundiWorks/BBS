@@ -6,7 +6,7 @@
 #endif
 
 #define MyAppName "AQC-Core"
-#define MyAppPublisher "Human Centic Works"
+#define MyAppPublisher "Human Centric Works"
 #define MyAppPublisherUrl "https://humancentic.works"
 #define MyAppExeName "AQCCore.exe"
 #define MyAppId "{{A8F3C2E1-9B4D-4E6A-8C1F-2D7E5A9B0C3D}"

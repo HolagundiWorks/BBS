@@ -29,7 +29,7 @@
                                Style="{StaticResource PageSubtitleStyle}"/>
                     <TextBlock Text="RCC BBS, civil BOQ, shuttering, estimate &amp; PDF drawing takeoff"
                                Style="{StaticResource CaptionSecondaryStyle}"/>
-                    <TextBlock Text="Developed by Human Centic Works, Hospet"
+                    <TextBlock Text="Developed by Human Centric Works, Hospet"
                                Style="{StaticResource MetaTextStyle}"
                                Margin="0,6,0,0"/>
                 </StackPanel>
@@ -58,7 +58,7 @@
             </StackPanel>
 
             <TextBlock Style="{StaticResource MetaTextStyle}"
-                       Text="© Human Centic Works, Hospet"/>
+                       Text="© Human Centric Works, Hospet"/>
         </StackPanel>
     </ScrollViewer>
 </Page>

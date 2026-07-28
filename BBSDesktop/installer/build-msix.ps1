@@ -26,7 +26,7 @@ $EngineDll = Join-Path $DesktopDir "build\bbs_engine.dll"
 $MsixOutDir = Join-Path $DesktopDir "artifacts\msix"
 $PfxPath = Join-Path $AppDir "AQCCore_TemporaryKey.pfx"
 $PfxPassword = "aqc-core-dev"
-$Publisher = "CN=Human Centic Works"
+$Publisher = "CN=Human Centric Works"
 
 function Get-AppVersionFromCsproj {
     param([string] $Csproj)

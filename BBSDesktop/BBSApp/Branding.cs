@@ -1,18 +1,18 @@
 namespace BBSApp;
 
-/// <summary>Product branding — AQC-Core by Human Centic Works, Hospet.</summary>
+/// <summary>Product branding — AQC-Core by Human Centric Works, Hospet.</summary>
 public static class Branding
 {
     public const string AppName = "AQC-Core";
     public const string FullName = "Accelerated Quantity and Costing Core";
-    public const string Company = "Human Centic Works";
+    public const string Company = "Human Centric Works";
     public const string Location = "Hospet";
-    public const string CompanyLine = "Human Centic Works, Hospet";
+    public const string CompanyLine = "Human Centric Works, Hospet";
     public const string Tagline = "Accelerated Quantity and Costing Core — RCC, masonry, finishes, estimate & cost";
-    public const string DevelopedBy = "Developed by Human Centic Works, Hospet";
-    public const string Copyright = "© Human Centic Works, Hospet";
-    public const string LicenseName = "Apache License 2.0";
-    public const string LicenseUrl = "https://www.apache.org/licenses/LICENSE-2.0";
+    public const string DevelopedBy = "Developed by Human Centric Works, Hospet";
+    public const string Copyright = "© Human Centric Works, Hospet";
+    public const string LicenseName = "GNU AGPL v3 (Community) or Commercial";
+    public const string LicenseUrl = "https://www.gnu.org/licenses/agpl-3.0.html";
 
     /// <summary>%LocalAppData% folder for app data (rate books, logos).</summary>
     public const string AppDataFolder = "AQCCore";
