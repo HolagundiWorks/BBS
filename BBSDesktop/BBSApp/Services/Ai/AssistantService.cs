@@ -107,7 +107,11 @@ public sealed class AssistantService
                 }
             }
 
-            _history.Add(new MessageParam { Role = Role.Assistant, Content = assistantContent });
+            // Skip an empty assistant turn (no blocks at all) — re-sending empty
+            // content on the next turn can 400. When tools ran, assistantContent
+            // holds their tool_use blocks, so this never drops a needed turn.
+            if (assistantContent.Count > 0)
+                _history.Add(new MessageParam { Role = Role.Assistant, Content = assistantContent });
 
             if (toolResults.Count == 0)
                 return finalText;   // no tool calls this turn → final answer
