@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Human Centric Works, Hospet
+
 // Bridge.cpp — RawRow -> engine glue (UTF-8 JSON friendly).
 #include "Bridge.h"
 

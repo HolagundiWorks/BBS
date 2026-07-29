@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Human Centric Works, Hospet
+
 // Engine.h — BBS calculation engine (columns, beams, slabs, footings, walls, stairs).
 #pragma once
 

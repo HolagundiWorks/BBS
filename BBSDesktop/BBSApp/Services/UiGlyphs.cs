@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Human Centric Works, Hospet
+
 namespace BBSApp.Services;
 
 /// <summary>Shared Segoe Fluent glyphs used across chrome (same icon everywhere).</summary>

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Human Centric Works, Hospet
+
 // Json.h — tiny, dependency-free JSON reader/writer.
 // Just enough to persist a BBS project as a human-readable .bbsproj file.
 #pragma once

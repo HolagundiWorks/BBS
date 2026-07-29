@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Human Centric Works, Hospet
+
 // Engine smoke tests — aggregated Nos, extras, footing types, retaining walls.
 #include "../src/core/Engine.h"
 #include "../src/core/Parse.h"

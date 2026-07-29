@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Human Centric Works, Hospet
+
 // Model.h — core data types for the Bar Bending Schedule engine.
 // IS 456 quantity-estimation model (not a full design tool).
 #pragma once

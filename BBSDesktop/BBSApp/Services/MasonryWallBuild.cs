@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Human Centric Works, Hospet
+
 namespace BBSApp.Services;
 
 /// <summary>Combined wall unit + thickness; auto block size for ACC / cement blocks.</summary>

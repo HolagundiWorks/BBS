@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Human Centric Works, Hospet
+
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
