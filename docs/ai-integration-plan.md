@@ -1,6 +1,6 @@
 # AI Integration Plan — AQC‑Core
 
-**Status:** Phases 0–2 implemented on this branch (assistant can read, run the engine, and make confirmed in-memory edits). Phase 3 still design-only.
+**Status:** Phases 0–2 implemented, plus the correspondence‑drafting piece of Phase 3. The two takeoff‑related Phase 3 items (AI wall‑mark, vision pre‑fill) are deferred — see the rollout table.
 **Scope:** Where and how to add an AI assistant/copilot to AQC‑Core, and the seams it plugs into.
 **Branch:** `claude/ai-entry-points-kgcmip`
 
@@ -230,7 +230,9 @@ every page.
 | **0** | `IAppCommandBus` refactor — route `NavigateTo` through the bus. No AI. | none (pure refactor) | ✅ done |
 | **1** | Read‑only assistant: command bar → `AssistantService` with `navigate`, `get_project_summary`, `run_calc` (RCC kinds). Answer questions, drive navigation, explain checks. Opt‑in via `ANTHROPIC_API_KEY`. | low | ✅ done |
 | **2** | Mutations: `add_element_row` (RCC), `update_setting` (covers, markup %, RMC flag), each gated by a modal confirmation dialog + a success toast. | medium (writes state) | ✅ done |
-| **3** | Generative helpers on existing seams — swap `SuggestWallMark` heuristic for a model call; draft correspondence bodies (`OfficeDocs.DefaultBody`); vision‑assisted takeoff pre‑fill (`TakeoffPage` + `OpeningScheduleLinker.Commit`). | higher (new surfaces) | planned |
+| **3a** | Correspondence drafting: `create_correspondence` write tool — the assistant drafts the body and inserts an editable, unnumbered draft into the office register (confirmed). | medium | ✅ done |
+| **3b** | Swap the `SuggestWallMark` heuristic for a model call in the takeoff commit path. | higher (deep UI path) | deferred |
+| **3c** | Vision‑assisted takeoff pre‑fill (`TakeoffPage` + `OpeningScheduleLinker.Commit`) — read a PDF drawing and pre‑populate takeoff items. | higher (PDF/vision + canvas) | deferred |
 
 **Phase 1 notes as built:**
 - Uses the official `Anthropic` .NET SDK (`claude-opus-5`, adaptive thinking) via a **manual tool loop** in `AssistantService` — the SDK's `BetaToolRunner` handler-registration API isn't in the reference docs, so the loop is hand-written to stay on documented ground.
@@ -243,6 +245,10 @@ every page.
 - `add_element_row` seeds a new row from the last row of that kind (so grades/section/level carry over), applies the caller's `fields`, stamps defaults, and auto‑assigns a fresh mark via `MemberSheetHelper` — scoped to the eight RCC kinds. On approval it appends, calls `Notify()`, toasts, and navigates to the page so the change is visible.
 - `update_setting` covers the six RCC nominal covers, the four estimate markup %s, and the `concrete_from_rmc` flag — all verified `ProjectStore`/`EstimateMarkups` members; each shows an old→new diff in the dialog.
 - Everything is **in‑memory only** — mutations set the dirty flag but nothing is saved until the user saves the project. Civil‑BOQ row adds, row editing/deletion, and levels are deferred (more coupling: masonry wall‑build, finish derivation, openings).
+
+**Phase 3 notes as built:**
+- **3a (done):** `create_correspondence` reuses the Phase 2 confirmation gate. The assistant writes the body itself (its own generation) and passes it in; the tool inserts an `OfficeDocument` **draft** (`Finalized = false`, no number) under the current persona into `ProjectStore.Office.Documents`, shows the would‑be number via `PreviewNumber` in the dialog, then navigates to the Correspondence page. Numbering stays a deliberate user action (finalize) — the assistant never finalizes.
+- **3b / 3c (deferred), with rationale:** both wire AI into the drawing‑takeoff path, which is the app's most complex UI (PDF render + measurement canvas). `SuggestWallMark` is a synchronous heuristic in the commit path; making it a model call means async + network latency mid‑commit. Vision pre‑fill additionally needs PDF‑to‑image rendering and mapping detections into `TakeoffState`. Both are worth doing, but they're high‑risk surfaces that should be built against a **live compile/run loop** rather than blind — which this environment (Windows‑only WinUI, not buildable here) can't provide. The heuristic `SuggestWallMark` remains a perfectly good default in the meantime.
 
 Phase 0 is worth doing on its own — exposing `NavigateTo` as a command bus is a
 clean improvement regardless of whether AI ships.

@@ -148,5 +148,10 @@ public sealed class AssistantService
       + "confirmation, so call the tool with the concrete change rather than asking in chat first. "
       + "Make one clear change at a time and report exactly what changed (or that the user "
       + "cancelled). Nothing is saved until the user saves the project.\n"
+      + "- You can draft office correspondence: when asked for a letter, notice, site "
+      + "instruction, certificate, etc., write the full body yourself and call "
+      + "create_correspondence with the type, a subject, and the body. It is added as an editable "
+      + "draft under the current persona and stays unnumbered until the user finalizes it (same "
+      + "confirmation dialog applies).\n"
       + "- Be concise and direct. Lead with the answer; keep caveats brief.";
 }
