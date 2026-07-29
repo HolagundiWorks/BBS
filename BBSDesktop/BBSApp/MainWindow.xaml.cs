@@ -1,5 +1,6 @@
 using BBSApp.Models;
 using BBSApp.Services;
+using BBSApp.Services.Ai;
 using BBSApp.Views;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
@@ -14,7 +15,7 @@ using WinRT.Interop;
 
 namespace BBSApp;
 
-public sealed partial class MainWindow : Window
+public sealed partial class MainWindow : Window, IAppCommandBus
 {
     private sealed record NavCmd(string Tag, string Label, object? Icon);
 
@@ -22,6 +23,8 @@ public sealed partial class MainWindow : Window
 
     private readonly List<RibbonTab> _tabs = new();
     private readonly Dictionary<string, ToggleButton> _tabButtons = new(StringComparer.OrdinalIgnoreCase);
+    // Canonical navigable tags, matched case-sensitively to NavigateTo's switch arms.
+    private readonly HashSet<string> _navTags = new(StringComparer.Ordinal);
     private string _activeTab = "project";
     private string _activeTag = "dashboard";
     private DispatcherTimer? _toastTimer;
@@ -173,6 +176,10 @@ public sealed partial class MainWindow : Window
             Cmd("settings_engineering", "Engineering", Glyph("\uE90F")),
             Cmd("settings_cost", "Cost %", Glyph("\uE8EF")),
         }));
+
+        _navTags.Clear();
+        foreach (var cmd in _tabs.SelectMany(t => t.Commands))
+            _navTags.Add(cmd.Tag);
     }
 
     private static NavCmd Cmd(string tag, string label, object? icon) => new(tag, label, icon);
@@ -411,7 +418,27 @@ public sealed partial class MainWindow : Window
     private void RibbonCommand_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.Tag is not string tag) return;
-        NavigateTo(tag);
+        Navigate(tag);
+    }
+
+    // ——— IAppCommandBus: the single external route into navigation ———
+
+    /// <summary>Canonical navigable ribbon tags, in ribbon order.</summary>
+    public IReadOnlyList<string> KnownTags =>
+        _tabs.SelectMany(t => t.Commands).Select(c => c.Tag).Distinct().ToArray();
+
+    /// <summary>
+    /// Navigate to a ribbon command tag. Returns <c>false</c> and does nothing for
+    /// an unknown tag, instead of falling through to the dashboard, so callers can
+    /// tell whether the request was understood.
+    /// </summary>
+    public bool Navigate(string tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return false;
+        var norm = tag.Trim();
+        if (!_navTags.Contains(norm)) return false;
+        NavigateTo(norm);
+        return true;
     }
 
     private void NavigateTo(string tag)
@@ -638,7 +665,7 @@ public sealed partial class MainWindow : Window
 
     private void SelectNavTag(string tag)
     {
-        NavigateTo(tag);
+        Navigate(tag);
     }
 
     // ——— Persona badge (read-only; declared under File → Project settings) ———
