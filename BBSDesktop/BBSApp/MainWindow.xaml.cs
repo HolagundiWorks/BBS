@@ -673,6 +673,13 @@ public sealed partial class MainWindow : Window, IAppCommandBus, IAssistantConfi
             string reply = await _assistant.AskAsync(prompt);
             ShowAssistantReply(string.IsNullOrWhiteSpace(reply) ? "(no reply)" : reply);
         }
+        catch (Exception ex) when (LooksLikeAuthError(ex))
+        {
+            // A stored key was rejected — clear it so the next ask re-prompts.
+            AssistantSettings.ApiKey = null;
+            _assistant = null;
+            ShowAssistantReply("That API key was rejected. Ask again to re-enter it.");
+        }
         catch (Exception ex)
         {
             ShowAssistantReply($"Assistant error: {ex.Message}");
@@ -747,6 +754,27 @@ public sealed partial class MainWindow : Window, IAppCommandBus, IAssistantConfi
         {
             return false;
         }
+    }
+
+    /// <summary>Heuristic: does this exception (or an inner one) look like an API-key/auth failure?
+    /// Uses only the exception type name and message so it needs no SDK type references.</summary>
+    private static bool LooksLikeAuthError(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            string name = e.GetType().Name;
+            if (name.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("Authentication", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("Forbidden", StringComparison.OrdinalIgnoreCase))
+                return true;
+            string m = e.Message ?? "";
+            if (m.Contains("api key", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("x-api-key", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("authentication", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("401"))
+                return true;
+        }
+        return false;
     }
 
     private void CalcInput_TextChanged(object sender, TextChangedEventArgs e) =>
