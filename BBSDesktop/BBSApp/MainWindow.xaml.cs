@@ -29,6 +29,8 @@ public sealed partial class MainWindow : Window, IAppCommandBus
     private string _activeTag = "dashboard";
     private DispatcherTimer? _toastTimer;
     private int _toastGeneration;
+    private AssistantService? _assistant;
+    private bool _assistantBusy;
 
     public MainWindow()
     {
@@ -612,15 +614,29 @@ public sealed partial class MainWindow : Window, IAppCommandBus
     {
         if (e.Key == VirtualKey.Enter)
         {
-            EvaluateCalc(selectResult: true);
             e.Handled = true;
+            string text = (CalcInput.Text ?? "").Trim();
+            // Arithmetic stays the instant path; anything else goes to the assistant.
+            if (QuickCalc.TryEvaluate(text, out var result))
+            {
+                CalcResult.Text = result;
+                CalcResult.Focus(FocusState.Programmatic);
+                CalcResult.SelectAll();
+            }
+            else if (!string.IsNullOrWhiteSpace(text))
+            {
+                _ = AskAssistantAsync(text);
+            }
         }
         else if (e.Key == VirtualKey.Escape)
         {
-            if (!string.IsNullOrEmpty(CalcInput.Text) || !string.IsNullOrEmpty(CalcResult.Text))
+            if (!string.IsNullOrEmpty(CalcInput.Text) || !string.IsNullOrEmpty(CalcResult.Text)
+                || AssistantReplyHost.Visibility == Visibility.Visible)
             {
                 CalcInput.Text = "";
                 CalcResult.Text = "";
+                AssistantReply.Text = "";
+                AssistantReplyHost.Visibility = Visibility.Collapsed;
             }
             else
             {
@@ -629,6 +645,46 @@ public sealed partial class MainWindow : Window, IAppCommandBus
             }
             e.Handled = true;
         }
+    }
+
+    private async Task AskAssistantAsync(string prompt)
+    {
+        if (_assistantBusy) return;
+        if (App.CommandBus is null) return;
+
+        _assistant ??= AssistantService.TryCreate(App.CommandBus, DispatcherQueue);
+        if (_assistant is null)
+        {
+            ShowAssistantReply("Set the ANTHROPIC_API_KEY environment variable to enable the assistant.");
+            return;
+        }
+
+        _assistantBusy = true;
+        AssistantReply.Text = "";
+        AssistantReplyHost.Visibility = Visibility.Visible;
+        AssistantBusy.IsActive = true;
+        AssistantBusy.Visibility = Visibility.Visible;
+        try
+        {
+            string reply = await _assistant.AskAsync(prompt);
+            ShowAssistantReply(string.IsNullOrWhiteSpace(reply) ? "(no reply)" : reply);
+        }
+        catch (Exception ex)
+        {
+            ShowAssistantReply($"Assistant error: {ex.Message}");
+        }
+        finally
+        {
+            AssistantBusy.IsActive = false;
+            AssistantBusy.Visibility = Visibility.Collapsed;
+            _assistantBusy = false;
+        }
+    }
+
+    private void ShowAssistantReply(string text)
+    {
+        AssistantReplyHost.Visibility = Visibility.Visible;
+        AssistantReply.Text = text;
     }
 
     private void CalcInput_TextChanged(object sender, TextChangedEventArgs e) =>

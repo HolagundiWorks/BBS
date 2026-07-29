@@ -1,6 +1,6 @@
 # AI Integration Plan — AQC‑Core
 
-**Status:** Design sketch (no runtime code yet)
+**Status:** Phases 0–1 implemented on this branch (read-only assistant). Phases 2–3 still design-only.
 **Scope:** Where and how to add an AI assistant/copilot to AQC‑Core, and the seams it plugs into.
 **Branch:** `claude/ai-entry-points-kgcmip`
 
@@ -225,12 +225,18 @@ every page.
 
 ## 7. Phased rollout
 
-| Phase | Deliverable | Risk |
-|-------|-------------|------|
-| **0** | `IAppCommandBus` refactor — route `NavigateTo` through the bus. No AI. | none (pure refactor) |
-| **1** | Read‑only assistant: command bar → `AssistantService` with `navigate`, `get_project_summary`, `run_calc`. Answer questions, drive navigation, explain checks. | low |
-| **2** | Mutations: `add_element_row`, `update_setting`, with change summaries + undo‑friendly phrasing. | medium (writes state) |
-| **3** | Generative helpers on existing seams — swap `SuggestWallMark` heuristic for a model call; draft correspondence bodies (`OfficeDocs.DefaultBody`); vision‑assisted takeoff pre‑fill (`TakeoffPage` + `OpeningScheduleLinker.Commit`). | higher (new surfaces) |
+| Phase | Deliverable | Risk | Status |
+|-------|-------------|------|--------|
+| **0** | `IAppCommandBus` refactor — route `NavigateTo` through the bus. No AI. | none (pure refactor) | ✅ done |
+| **1** | Read‑only assistant: command bar → `AssistantService` with `navigate`, `get_project_summary`, `run_calc` (RCC kinds). Answer questions, drive navigation, explain checks. Opt‑in via `ANTHROPIC_API_KEY`. | low | ✅ done |
+| **2** | Mutations: `add_element_row`, `update_setting`, with change summaries + undo‑friendly phrasing. | medium (writes state) | planned |
+| **3** | Generative helpers on existing seams — swap `SuggestWallMark` heuristic for a model call; draft correspondence bodies (`OfficeDocs.DefaultBody`); vision‑assisted takeoff pre‑fill (`TakeoffPage` + `OpeningScheduleLinker.Commit`). | higher (new surfaces) | planned |
+
+**Phase 1 notes as built:**
+- Uses the official `Anthropic` .NET SDK (`claude-opus-5`, adaptive thinking) via a **manual tool loop** in `AssistantService` — the SDK's `BetaToolRunner` handler-registration API isn't in the reference docs, so the loop is hand-written to stay on documented ground.
+- `run_calc` is restricted to the eight RCC kinds the engine's generate path handles (`columns`, `beams`, `pedestals`, `lintels`, `slabs`, `footings`, `walls`, `stairs`); it clones rows before `ExpandForGenerate` so preview never mutates the project. Civil BOQ uses different calculators — deferred.
+- The assistant is **inert without `ANTHROPIC_API_KEY`** (`AssistantService.TryCreate` returns null); the command bar then shows a one‑line hint instead of calling out.
+- **Not yet built here:** in‑app key entry in Settings, and streaming the reply token‑by‑token (both would improve UX but aren't required for read‑only Q&A).
 
 Phase 0 is worth doing on its own — exposing `NavigateTo` as a command bus is a
 clean improvement regardless of whether AI ships.
