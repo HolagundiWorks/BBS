@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Anthropic;
 using Anthropic.Models.Messages;
 using BBSApp.Services;
 
@@ -30,14 +31,18 @@ public sealed class AssistantTools
     // Correspondence type codes (LTR, MEMO, …), derived so they can't drift from the register.
     private static readonly string[] DocCodes = DocTypeInfo.All.Select(t => t.Code).ToArray();
 
+    private const long MaxPdfBytes = 20 * 1024 * 1024;
+
     private readonly IAppCommandBus _bus;
     private readonly IAssistantConfirm _confirm;
+    private readonly AnthropicClient? _client;
     private readonly IReadOnlyList<Tool> _definitions;
 
-    public AssistantTools(IAppCommandBus bus, IAssistantConfirm confirm)
+    public AssistantTools(IAppCommandBus bus, IAssistantConfirm confirm, AnthropicClient? client)
     {
         _bus = bus;
         _confirm = confirm;
+        _client = client;
         _definitions = BuildDefinitions();
     }
 
@@ -52,6 +57,9 @@ public sealed class AssistantTools
         "add_element_row" => AddElementRowAsync(input),
         "update_setting" => UpdateSettingAsync(input),
         "create_correspondence" => CreateCorrespondenceAsync(input),
+        "list_takeoff" => Task.FromResult(ListTakeoff()),
+        "commit_opening" => CommitOpeningAsync(input),
+        "read_drawing" => ReadDrawingAsync(input),
         _ => Task.FromResult($"Unknown tool: {name}")
     };
 
@@ -160,6 +168,49 @@ public sealed class AssistantTools
                     ["to_address"] = Schema(new { type = "string", description = "Recipient address (optional)." })
                 },
                 Required = new List<string> { "type", "body" }
+            }
+        },
+        new Tool
+        {
+            Name = "list_takeoff",
+            Description = "Return a JSON view of the drawing takeoff: whether a PDF and scale are "
+                        + "set, the measured masonry walls, the openings (with sizes, committed "
+                        + "state, and a suggested wall/kind), and the BOQ masonry wall marks. "
+                        + "Read-only.",
+            InputSchema = new() { Properties = new Dictionary<string, JsonElement>() }
+        },
+        new Tool
+        {
+            Name = "commit_opening",
+            Description = "Commit a takeoff opening to the BOQ: create the door/window schedule "
+                        + "entry (or deduct-only) plus the masonry wall deduction, on the wall you "
+                        + "choose. Get opening ids and candidate walls from list_takeoff, and pick "
+                        + "the wall from the masonry walls on that opening's level. The user must "
+                        + "approve in a dialog before it is applied — do not ask in chat first.",
+            InputSchema = new()
+            {
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["opening_id"] = Schema(new { type = "string", description = "Takeoff opening id (from list_takeoff)." }),
+                    ["kind"] = Schema(new { type = "string", @enum = new[] { "door", "window", "deduct", "auto" }, description = "Schedule kind; auto = infer from proportions." }),
+                    ["wall_mark"] = Schema(new { type = "string", description = "Masonry wall mark to deduct from; omit to use the nearest-wall default." })
+                },
+                Required = new List<string> { "opening_id" }
+            }
+        },
+        new Tool
+        {
+            Name = "read_drawing",
+            Description = "Visually analyze the currently loaded takeoff PDF drawing and return a "
+                        + "description (rooms, walls, columns, doors/windows, visible dimensions "
+                        + "and notes). Use it to understand a drawing before helping with takeoff. "
+                        + "Read-only; requires a drawing to be loaded on the takeoff page.",
+            InputSchema = new()
+            {
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["question"] = Schema(new { type = "string", description = "Optional specific question about the drawing." })
+                }
             }
         }
     };
@@ -404,6 +455,164 @@ public sealed class AssistantTools
              + (string.IsNullOrWhiteSpace(subject) ? "" : $" \"{subject}\"")
              + ". It is unnumbered until you finalize it on the Correspondence page.";
     }
+
+    // ——— Takeoff tools (3b / 3c) ———
+
+    private static string ListTakeoff()
+    {
+        var t = ProjectStore.Current.Takeoff;
+        var walls = new JsonArray();
+        var openings = new JsonArray();
+        int other = 0;
+
+        foreach (var it in t.Items)
+        {
+            bool isOpening = it.Tool.Equals("Opening", StringComparison.OrdinalIgnoreCase)
+                             || it.Fields.ContainsKey("opening_l");
+            if (isOpening)
+            {
+                openings.Add(new JsonObject
+                {
+                    ["id"] = it.Id,
+                    ["level"] = it.Level,
+                    ["opening_l"] = it.Fields.GetValueOrDefault("opening_l", ""),
+                    ["opening_h"] = it.Fields.GetValueOrDefault("opening_h", ""),
+                    ["nos"] = it.Fields.GetValueOrDefault("opening_nos", "1"),
+                    ["committed"] = it.Committed,
+                    ["suggested_wall"] = OpeningScheduleLinker.SuggestWallMark(ProjectStore.Current, it),
+                    ["suggested_kind"] = OpeningScheduleLinker.SuggestKind(it).ToString()
+                });
+            }
+            else if (it.Category.Equals("masonry", StringComparison.OrdinalIgnoreCase))
+            {
+                walls.Add(new JsonObject { ["mark"] = it.Mark, ["level"] = it.Level, ["length_mm"] = it.LengthMm });
+            }
+            else other++;
+        }
+
+        var boqWalls = new JsonArray();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var w in ProjectStore.Current.MasonryWalls)
+            if (w.TryGetValue("mark", out var m) && !string.IsNullOrWhiteSpace(m) && seen.Add(m.Trim()))
+                boqWalls.Add(m.Trim());
+
+        return new JsonObject
+        {
+            ["pdf_loaded"] = t.PdfPath is not null,
+            ["scale_set"] = t.MmPerPx > 0,
+            ["mm_per_px"] = t.MmPerPx,
+            ["measured_masonry_walls"] = walls,
+            ["openings"] = openings,
+            ["other_items"] = other,
+            ["boq_masonry_wall_marks"] = boqWalls
+        }.ToJsonString();
+    }
+
+    private async Task<string> CommitOpeningAsync(IReadOnlyDictionary<string, JsonElement> input)
+    {
+        string id = GetString(input, "opening_id").Trim();
+        if (string.IsNullOrWhiteSpace(id)) return "Provide opening_id (see list_takeoff).";
+
+        var store = ProjectStore.Current;
+        var item = store.Takeoff.Items.FirstOrDefault(i => i.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (item is null) return $"No takeoff item with id {id}.";
+        if (!item.Fields.ContainsKey("opening_l")) return "That takeoff item is not an opening.";
+        if (item.Committed) return "That opening is already committed.";
+
+        var kind = ParseKind(GetString(input, "kind"), item);
+        string wallMark = GetString(input, "wall_mark").Trim();
+        if (string.IsNullOrWhiteSpace(wallMark))
+            wallMark = OpeningScheduleLinker.SuggestWallMark(store, item);
+
+        string dims = $"{item.Fields.GetValueOrDefault("opening_l", "?")}×{item.Fields.GetValueOrDefault("opening_h", "?")} mm";
+        string details = $"Opening {dims} on level {item.Level}\n→ {KindLabel(kind)} + masonry deduct on wall {wallMark}";
+        if (!await _confirm.ConfirmAsync("Commit opening to BOQ?", details))
+            return "Cancelled — opening not committed.";
+
+        try
+        {
+            var res = OpeningScheduleLinker.Commit(store, item, kind, wallMark);
+            store.Notify();
+            AppNotify.Success("Opening committed", res.Message);
+            _bus.Navigate("takeoff");
+            return res.Message;
+        }
+        catch (Exception ex)
+        {
+            return $"Could not commit opening: {ex.Message}";
+        }
+    }
+
+    private async Task<string> ReadDrawingAsync(IReadOnlyDictionary<string, JsonElement> input)
+    {
+        if (_client is null) return "The drawing reader is unavailable (no API key).";
+
+        var path = ProjectStore.Current.Takeoff.PdfPath;
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return "No takeoff drawing is loaded. Load a PDF on the Drawing takeoff page first.";
+
+        byte[] bytes;
+        try { bytes = await File.ReadAllBytesAsync(path); }
+        catch (Exception ex) { return $"Could not read the drawing file: {ex.Message}"; }
+        if (bytes.LongLength > MaxPdfBytes)
+            return "The drawing PDF is too large to analyze (over 20 MB).";
+
+        string b64 = await Task.Run(() => Convert.ToBase64String(bytes));
+        string question = GetString(input, "question").Trim();
+        string prompt = string.IsNullOrWhiteSpace(question)
+            ? "This is a construction drawing. Describe what it shows: rooms/spaces, walls, columns, "
+              + "doors and windows with approximate sizes if dimensioned, and any visible dimensions, "
+              + "grid references, levels, or notes. Be concise and organized."
+            : question;
+
+        try
+        {
+            var resp = await _client.Messages.Create(new MessageCreateParams
+            {
+                Model = "claude-opus-5",
+                MaxTokens = 8192,
+                Messages =
+                [
+                    new MessageParam
+                    {
+                        Role = Role.User,
+                        Content = new List<ContentBlockParam>
+                        {
+                            new DocumentBlockParam { Source = new Base64PdfSource { Data = b64 } },
+                            new TextBlockParam { Text = prompt }
+                        }
+                    }
+                ]
+            });
+
+            var parts = new List<string>();
+            foreach (var block in resp.Content)
+                if (block.TryPickText(out TextBlock? text))
+                    parts.Add(text.Text);
+            string joined = string.Join("\n", parts).Trim();
+            return string.IsNullOrEmpty(joined) ? "The drawing reader returned no text." : joined;
+        }
+        catch (Exception ex)
+        {
+            return $"Could not analyze the drawing: {ex.Message}";
+        }
+    }
+
+    private static OpeningScheduleLinker.ScheduleKind ParseKind(string k, TakeoffItem item) =>
+        k.Trim().ToLowerInvariant() switch
+        {
+            "door" => OpeningScheduleLinker.ScheduleKind.Door,
+            "window" => OpeningScheduleLinker.ScheduleKind.Window,
+            "deduct" or "deduct_only" or "deductonly" => OpeningScheduleLinker.ScheduleKind.DeductOnly,
+            _ => OpeningScheduleLinker.SuggestKind(item)
+        };
+
+    private static string KindLabel(OpeningScheduleLinker.ScheduleKind k) => k switch
+    {
+        OpeningScheduleLinker.ScheduleKind.Door => "Door schedule",
+        OpeningScheduleLinker.ScheduleKind.Window => "Window schedule",
+        _ => "Deduct only"
+    };
 
     // ——— Helpers ———
 

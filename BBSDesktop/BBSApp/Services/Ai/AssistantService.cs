@@ -36,7 +36,7 @@ public sealed class AssistantService
         var key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
         if (string.IsNullOrWhiteSpace(key)) return null;
         var client = new AnthropicClient { ApiKey = key };
-        return new AssistantService(client, new AssistantTools(bus, confirm), ui);
+        return new AssistantService(client, new AssistantTools(bus, confirm, client), ui);
     }
 
     public async Task<string> AskAsync(string userText)
@@ -153,5 +153,10 @@ public sealed class AssistantService
       + "create_correspondence with the type, a subject, and the body. It is added as an editable "
       + "draft under the current persona and stays unnumbered until the user finalizes it (same "
       + "confirmation dialog applies).\n"
+      + "- For the drawing takeoff: use list_takeoff to see measured walls and openings, "
+      + "read_drawing to visually analyze the loaded PDF, and commit_opening to link an opening "
+      + "to a wall as a door/window/deduct (confirmed). When committing an opening, choose the "
+      + "wall yourself from the masonry walls on that opening's level rather than relying only on "
+      + "the geometric default.\n"
       + "- Be concise and direct. Lead with the answer; keep caveats brief.";
 }

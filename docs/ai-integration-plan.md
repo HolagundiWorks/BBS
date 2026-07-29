@@ -1,6 +1,6 @@
 # AI Integration Plan — AQC‑Core
 
-**Status:** Phases 0–2 implemented, plus the correspondence‑drafting piece of Phase 3. The two takeoff‑related Phase 3 items (AI wall‑mark, vision pre‑fill) are deferred — see the rollout table.
+**Status:** Phases 0–3 implemented on this branch. Phase 3's takeoff items are delivered **additively at the tool layer** (not by rewiring the takeoff UI) — see the notes.
 **Scope:** Where and how to add an AI assistant/copilot to AQC‑Core, and the seams it plugs into.
 **Branch:** `claude/ai-entry-points-kgcmip`
 
@@ -231,8 +231,8 @@ every page.
 | **1** | Read‑only assistant: command bar → `AssistantService` with `navigate`, `get_project_summary`, `run_calc` (RCC kinds). Answer questions, drive navigation, explain checks. Opt‑in via `ANTHROPIC_API_KEY`. | low | ✅ done |
 | **2** | Mutations: `add_element_row` (RCC), `update_setting` (covers, markup %, RMC flag), each gated by a modal confirmation dialog + a success toast. | medium (writes state) | ✅ done |
 | **3a** | Correspondence drafting: `create_correspondence` write tool — the assistant drafts the body and inserts an editable, unnumbered draft into the office register (confirmed). | medium | ✅ done |
-| **3b** | Swap the `SuggestWallMark` heuristic for a model call in the takeoff commit path. | higher (deep UI path) | deferred |
-| **3c** | Vision‑assisted takeoff pre‑fill (`TakeoffPage` + `OpeningScheduleLinker.Commit`) — read a PDF drawing and pre‑populate takeoff items. | higher (PDF/vision + canvas) | deferred |
+| **3b** | Model‑chosen opening→wall assignment: `list_takeoff` (read) + `commit_opening` (confirmed) let the assistant pick the wall and run the deterministic `OpeningScheduleLinker.Commit`. The heuristic stays as the fallback/default. | medium (tool‑layer, additive) | ✅ done |
+| **3c** | Vision drawing read: `read_drawing` sends the loaded takeoff PDF to Claude (native PDF input) and returns an analysis the assistant can act on. | medium (tool‑layer, additive) | ✅ done |
 
 **Phase 1 notes as built:**
 - Uses the official `Anthropic` .NET SDK (`claude-opus-5`, adaptive thinking) via a **manual tool loop** in `AssistantService` — the SDK's `BetaToolRunner` handler-registration API isn't in the reference docs, so the loop is hand-written to stay on documented ground.
@@ -248,7 +248,9 @@ every page.
 
 **Phase 3 notes as built:**
 - **3a (done):** `create_correspondence` reuses the Phase 2 confirmation gate. The assistant writes the body itself (its own generation) and passes it in; the tool inserts an `OfficeDocument` **draft** (`Finalized = false`, no number) under the current persona into `ProjectStore.Office.Documents`, shows the would‑be number via `PreviewNumber` in the dialog, then navigates to the Correspondence page. Numbering stays a deliberate user action (finalize) — the assistant never finalizes.
-- **3b / 3c (deferred), with rationale:** both wire AI into the drawing‑takeoff path, which is the app's most complex UI (PDF render + measurement canvas). `SuggestWallMark` is a synchronous heuristic in the commit path; making it a model call means async + network latency mid‑commit. Vision pre‑fill additionally needs PDF‑to‑image rendering and mapping detections into `TakeoffState`. Both are worth doing, but they're high‑risk surfaces that should be built against a **live compile/run loop** rather than blind — which this environment (Windows‑only WinUI, not buildable here) can't provide. The heuristic `SuggestWallMark` remains a perfectly good default in the meantime.
+- **3b (done) — model‑chosen opening→wall, additively.** Rather than rewire the synchronous takeoff UI commit path (the risky part), the value lands at the tool layer: `list_takeoff` exposes measured walls + openings + BOQ wall marks, and `commit_opening(opening_id, kind?, wall_mark?)` lets the **model** choose the wall and runs the deterministic `OpeningScheduleLinker.Commit` (confirmed, then navigates). If the model omits the wall, `SuggestWallMark` is the fallback — so the heuristic isn't removed, it's the default the AI can override with reasoning.
+- **3c (done) — vision drawing read, additively.** `read_drawing(question?)` reads `Takeoff.PdfPath` and sends the **PDF straight to Claude** (native base64 PDF input — no PDF‑to‑image rendering, no `Windows.Data.Pdf`), returning an analysis of rooms/walls/openings/dimensions. This is advisory: the AI gets eyes on the drawing and can then act through the confirmed write tools. Capped at 20 MB.
+- **Deliberately still deferred:** pixel‑level auto‑pre‑fill that detects geometry from the drawing and injects scaled `TakeoffItem`s into the canvas. That needs the manual scale calibration (`MmPerPx`) and reliable pixel→mm mapping, and is genuinely hard to get right without a **live compile/run loop** — which this environment (Windows‑only WinUI, not buildable here) can't provide.
 
 Phase 0 is worth doing on its own — exposing `NavigateTo` as a command bus is a
 clean improvement regardless of whether AI ships.
