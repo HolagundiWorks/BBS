@@ -15,7 +15,7 @@ using WinRT.Interop;
 
 namespace BBSApp;
 
-public sealed partial class MainWindow : Window, IAppCommandBus
+public sealed partial class MainWindow : Window, IAppCommandBus, IAssistantConfirm
 {
     private sealed record NavCmd(string Tag, string Label, object? Icon);
 
@@ -650,9 +650,8 @@ public sealed partial class MainWindow : Window, IAppCommandBus
     private async Task AskAssistantAsync(string prompt)
     {
         if (_assistantBusy) return;
-        if (App.CommandBus is null) return;
 
-        _assistant ??= AssistantService.TryCreate(App.CommandBus, DispatcherQueue);
+        _assistant ??= AssistantService.TryCreate(this, this, DispatcherQueue);
         if (_assistant is null)
         {
             ShowAssistantReply("Set the ANTHROPIC_API_KEY environment variable to enable the assistant.");
@@ -685,6 +684,29 @@ public sealed partial class MainWindow : Window, IAppCommandBus
     {
         AssistantReplyHost.Visibility = Visibility.Visible;
         AssistantReply.Text = text;
+    }
+
+    // IAssistantConfirm — modal gate for any assistant-driven change to project state.
+    public async Task<bool> ConfirmAsync(string title, string details)
+    {
+        try
+        {
+            var dlg = new ContentDialog
+            {
+                Title = title,
+                Content = new TextBlock { Text = details, TextWrapping = TextWrapping.Wrap },
+                PrimaryButtonText = "Apply",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = Content.XamlRoot
+            };
+            return await dlg.ShowAsync() == ContentDialogResult.Primary;
+        }
+        catch
+        {
+            // e.g. another ContentDialog is already open — treat as declined.
+            return false;
+        }
     }
 
     private void CalcInput_TextChanged(object sender, TextChangedEventArgs e) =>

@@ -1,6 +1,6 @@
 # AI Integration Plan — AQC‑Core
 
-**Status:** Phases 0–1 implemented on this branch (read-only assistant). Phases 2–3 still design-only.
+**Status:** Phases 0–2 implemented on this branch (assistant can read, run the engine, and make confirmed in-memory edits). Phase 3 still design-only.
 **Scope:** Where and how to add an AI assistant/copilot to AQC‑Core, and the seams it plugs into.
 **Branch:** `claude/ai-entry-points-kgcmip`
 
@@ -229,7 +229,7 @@ every page.
 |-------|-------------|------|--------|
 | **0** | `IAppCommandBus` refactor — route `NavigateTo` through the bus. No AI. | none (pure refactor) | ✅ done |
 | **1** | Read‑only assistant: command bar → `AssistantService` with `navigate`, `get_project_summary`, `run_calc` (RCC kinds). Answer questions, drive navigation, explain checks. Opt‑in via `ANTHROPIC_API_KEY`. | low | ✅ done |
-| **2** | Mutations: `add_element_row`, `update_setting`, with change summaries + undo‑friendly phrasing. | medium (writes state) | planned |
+| **2** | Mutations: `add_element_row` (RCC), `update_setting` (covers, markup %, RMC flag), each gated by a modal confirmation dialog + a success toast. | medium (writes state) | ✅ done |
 | **3** | Generative helpers on existing seams — swap `SuggestWallMark` heuristic for a model call; draft correspondence bodies (`OfficeDocs.DefaultBody`); vision‑assisted takeoff pre‑fill (`TakeoffPage` + `OpeningScheduleLinker.Commit`). | higher (new surfaces) | planned |
 
 **Phase 1 notes as built:**
@@ -237,6 +237,12 @@ every page.
 - `run_calc` is restricted to the eight RCC kinds the engine's generate path handles (`columns`, `beams`, `pedestals`, `lintels`, `slabs`, `footings`, `walls`, `stairs`); it clones rows before `ExpandForGenerate` so preview never mutates the project. Civil BOQ uses different calculators — deferred.
 - The assistant is **inert without `ANTHROPIC_API_KEY`** (`AssistantService.TryCreate` returns null); the command bar then shows a one‑line hint instead of calling out.
 - **Not yet built here:** in‑app key entry in Settings, and streaming the reply token‑by‑token (both would improve UX but aren't required for read‑only Q&A).
+
+**Phase 2 notes as built:**
+- Writes are gated by a **hard modal confirmation** (`IAssistantConfirm`, implemented on `MainWindow` with a `ContentDialog` mirroring `About_Click`) — the dialog, not the chat, is the confirmation. The tool loop went async (`ExecuteAsync` + an async UI marshal) so a handler can await the dialog.
+- `add_element_row` seeds a new row from the last row of that kind (so grades/section/level carry over), applies the caller's `fields`, stamps defaults, and auto‑assigns a fresh mark via `MemberSheetHelper` — scoped to the eight RCC kinds. On approval it appends, calls `Notify()`, toasts, and navigates to the page so the change is visible.
+- `update_setting` covers the six RCC nominal covers, the four estimate markup %s, and the `concrete_from_rmc` flag — all verified `ProjectStore`/`EstimateMarkups` members; each shows an old→new diff in the dialog.
+- Everything is **in‑memory only** — mutations set the dirty flag but nothing is saved until the user saves the project. Civil‑BOQ row adds, row editing/deletion, and levels are deferred (more coupling: masonry wall‑build, finish derivation, openings).
 
 Phase 0 is worth doing on its own — exposing `NavigateTo` as a command bus is a
 clean improvement regardless of whether AI ships.

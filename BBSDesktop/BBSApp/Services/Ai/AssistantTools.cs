@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Anthropic.Models.Messages;
@@ -7,10 +8,11 @@ using BBSApp.Services;
 namespace BBSApp.Services.Ai;
 
 /// <summary>
-/// The assistant's read-only tool surface (Phase 1): drive navigation, read a
-/// project summary, and run the deterministic engine for an RCC member kind.
-/// Every handler wraps an existing service — no new business logic lives here,
-/// and nothing here mutates project data.
+/// The assistant's tool surface. Read tools (navigate, get_project_summary,
+/// run_calc) wrap existing services directly. Write tools (add_element_row,
+/// update_setting) apply in-memory changes only after the user approves them
+/// through <see cref="IAssistantConfirm"/>. Nothing here saves to disk, and the
+/// C++ engine remains the source of truth for all numbers.
 /// </summary>
 public sealed class AssistantTools
 {
@@ -18,24 +20,35 @@ public sealed class AssistantTools
     private static readonly string[] EngineKinds =
         { "columns", "beams", "pedestals", "lintels", "slabs", "footings", "walls", "stairs" };
 
+    private static readonly string[] SettingPaths =
+    {
+        "cover.column", "cover.beam", "cover.slab", "cover.footing", "cover.pedestal", "cover.lintel",
+        "markup.electrical", "markup.plumbing", "markup.escalation", "markup.consulting",
+        "concrete_from_rmc"
+    };
+
     private readonly IAppCommandBus _bus;
+    private readonly IAssistantConfirm _confirm;
     private readonly IReadOnlyList<Tool> _definitions;
 
-    public AssistantTools(IAppCommandBus bus)
+    public AssistantTools(IAppCommandBus bus, IAssistantConfirm confirm)
     {
         _bus = bus;
+        _confirm = confirm;
         _definitions = BuildDefinitions();
     }
 
     public IReadOnlyList<Tool> Definitions => _definitions;
 
-    /// <summary>Execute a tool by name. Must be called on the UI thread — touches ProjectStore and navigation.</summary>
-    public string Execute(string name, IReadOnlyDictionary<string, JsonElement> input) => name switch
+    /// <summary>Execute a tool by name. Must run on the UI thread — touches ProjectStore, navigation, and dialogs.</summary>
+    public Task<string> ExecuteAsync(string name, IReadOnlyDictionary<string, JsonElement> input) => name switch
     {
-        "navigate" => Navigate(input),
-        "get_project_summary" => ProjectSummary(),
-        "run_calc" => RunCalc(input),
-        _ => $"Unknown tool: {name}"
+        "navigate" => Task.FromResult(Navigate(input)),
+        "get_project_summary" => Task.FromResult(ProjectSummary()),
+        "run_calc" => Task.FromResult(RunCalc(input)),
+        "add_element_row" => AddElementRowAsync(input),
+        "update_setting" => UpdateSettingAsync(input),
+        _ => Task.FromResult($"Unknown tool: {name}")
     };
 
     private IReadOnlyList<Tool> BuildDefinitions() => new[]
@@ -81,8 +94,50 @@ public sealed class AssistantTools
                 },
                 Required = new List<string> { "kind" }
             }
+        },
+        new Tool
+        {
+            Name = "add_element_row",
+            Description = "Add one RCC member row (columns, beams, pedestals, lintels, slabs, "
+                        + "footings, walls, stairs) to the project. Put only the fields you want to "
+                        + "set in `fields`; the rest are inherited from the last row of that kind "
+                        + "(or defaults), and the mark is auto-assigned. The user must approve the "
+                        + "change in a dialog before it is applied — do not ask in chat first.",
+            InputSchema = new()
+            {
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["kind"] = Schema(new { type = "string", @enum = EngineKinds, description = "RCC member kind." }),
+                    ["fields"] = Schema(new
+                    {
+                        type = "object",
+                        description = "Field key/value overrides for the new row (values as strings).",
+                        additionalProperties = new { type = "string" }
+                    })
+                },
+                Required = new List<string> { "kind" }
+            }
+        },
+        new Tool
+        {
+            Name = "update_setting",
+            Description = "Change one project setting: RCC nominal covers in mm (cover.column …), "
+                        + "estimate markup percentages (markup.electrical …), or the "
+                        + "concrete-from-RMC flag. The user must approve the change in a dialog "
+                        + "before it is applied — do not ask in chat first.",
+            InputSchema = new()
+            {
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["path"] = Schema(new { type = "string", @enum = SettingPaths, description = "Setting to change." }),
+                    ["value"] = Schema(new { type = "string", description = "New value: a number for covers/markups, or true/false for concrete_from_rmc." })
+                },
+                Required = new List<string> { "path", "value" }
+            }
         }
     };
+
+    // ——— Read tools ———
 
     private string Navigate(IReadOnlyDictionary<string, JsonElement> input)
     {
@@ -143,7 +198,7 @@ public sealed class AssistantTools
     {
         string kind = GetString(input, "kind").Trim().ToLowerInvariant();
         var col = CollectionFor(kind);
-        if (col is null)
+        if (col is null || !EngineKinds.Contains(kind))
             return $"run_calc supports RCC kinds only: {string.Join(", ", EngineKinds)}.";
         if (col.Count == 0)
             return $"No {kind} rows in the project yet.";
@@ -177,6 +232,107 @@ public sealed class AssistantTools
         }
     }
 
+    // ——— Write tools (confirmed) ———
+
+    private async Task<string> AddElementRowAsync(IReadOnlyDictionary<string, JsonElement> input)
+    {
+        string kind = GetString(input, "kind").Trim().ToLowerInvariant();
+        var col = CollectionFor(kind);
+        if (col is null || !EngineKinds.Contains(kind))
+            return $"add_element_row supports RCC kinds only: {string.Join(", ", EngineKinds)}.";
+
+        // Seed from the last existing row so grades/section/level carry over.
+        var row = col.Count > 0
+            ? new Dictionary<string, string>(col[^1], StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var setKeys = new List<string>();
+        if (input.TryGetValue("fields", out var fieldsEl) && fieldsEl.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in fieldsEl.EnumerateObject())
+            {
+                row[prop.Name] = prop.Value.ValueKind == JsonValueKind.String
+                    ? prop.Value.GetString() ?? ""
+                    : prop.Value.GetRawText();
+                setKeys.Add(prop.Name);
+            }
+        }
+
+        row["nos"] = row.TryGetValue("nos", out var nos) && !string.IsNullOrWhiteSpace(nos) ? nos : "1";
+        MemberSheetHelper.StampDefaults(kind, row);
+
+        bool callerMark = row.TryGetValue("mark", out var mk) && !string.IsNullOrWhiteSpace(mk);
+        bool dupMark = callerMark && col.Any(r =>
+            r.TryGetValue("mark", out var em) && em.Equals(mk, StringComparison.OrdinalIgnoreCase));
+        if (!callerMark || dupMark)
+            row["mark"] = MemberSheetHelper.SuggestNextMark(kind, col, row);
+
+        if (!await _confirm.ConfirmAsync($"Add {Singular(kind)} to the project?", DescribeRow(kind, row, setKeys)))
+            return $"Cancelled — no {Singular(kind)} added.";
+
+        col.Add(row);
+        ProjectStore.Current.Notify();
+        AppNotify.Success($"{Singular(kind)} added", row.GetValueOrDefault("mark", kind));
+        _bus.Navigate(kind);
+        return $"Added a {Singular(kind)} (mark {row.GetValueOrDefault("mark", "?")}). "
+             + $"The project now has {col.Count} {kind}.";
+    }
+
+    private async Task<string> UpdateSettingAsync(IReadOnlyDictionary<string, JsonElement> input)
+    {
+        string path = GetString(input, "path").Trim().ToLowerInvariant();
+        string value = GetString(input, "value").Trim();
+        if (string.IsNullOrWhiteSpace(path)) return "No setting path supplied.";
+
+        var s = ProjectStore.Current;
+
+        var doubles = new Dictionary<string, (Func<double> Get, Action<double> Set)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["cover.column"] = (() => s.CoverColumnMm, v => s.CoverColumnMm = v),
+            ["cover.beam"] = (() => s.CoverBeamMm, v => s.CoverBeamMm = v),
+            ["cover.slab"] = (() => s.CoverSlabMm, v => s.CoverSlabMm = v),
+            ["cover.footing"] = (() => s.CoverFootingMm, v => s.CoverFootingMm = v),
+            ["cover.pedestal"] = (() => s.CoverPedestalMm, v => s.CoverPedestalMm = v),
+            ["cover.lintel"] = (() => s.CoverLintelMm, v => s.CoverLintelMm = v),
+            ["markup.electrical"] = (() => s.Markups.ElectricalPct, v => s.Markups.ElectricalPct = v),
+            ["markup.plumbing"] = (() => s.Markups.PlumbingPct, v => s.Markups.PlumbingPct = v),
+            ["markup.escalation"] = (() => s.Markups.EscalationPct, v => s.Markups.EscalationPct = v),
+            ["markup.consulting"] = (() => s.Markups.ConsultingFeePct, v => s.Markups.ConsultingFeePct = v),
+        };
+
+        if (doubles.TryGetValue(path, out var acc))
+        {
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) || d < 0)
+                return $"Could not read a non-negative number from \"{value}\".";
+            string cur = acc.Get().ToString("0.###", CultureInfo.InvariantCulture);
+            string nw = d.ToString("0.###", CultureInfo.InvariantCulture);
+            if (!await _confirm.ConfirmAsync("Change setting?", $"{path}: {cur} → {nw}"))
+                return "Cancelled — setting unchanged.";
+            acc.Set(d);
+            ProjectStore.Current.Notify();
+            AppNotify.Success("Setting updated", $"{path} = {nw}");
+            return $"Set {path} to {nw} (was {cur}).";
+        }
+
+        if (path == "concrete_from_rmc")
+        {
+            if (!TryParseBool(value, out var b))
+                return $"Could not read true/false from \"{value}\".";
+            string cur = s.ConcreteFromRmc ? "true" : "false";
+            string nw = b ? "true" : "false";
+            if (!await _confirm.ConfirmAsync("Change setting?", $"concrete_from_rmc: {cur} → {nw}"))
+                return "Cancelled — setting unchanged.";
+            s.ConcreteFromRmc = b;
+            ProjectStore.Current.Notify();
+            AppNotify.Success("Setting updated", $"concrete_from_rmc = {nw}");
+            return $"Set concrete_from_rmc to {nw} (was {cur}).";
+        }
+
+        return $"Unknown setting \"{path}\". Supported: {string.Join(", ", SettingPaths)}.";
+    }
+
+    // ——— Helpers ———
+
     private static JsonObject TableToJson(GenTable? t)
     {
         var headers = new JsonArray();
@@ -209,6 +365,29 @@ public sealed class AssistantTools
             "stairs" => s.Stairs,
             _ => null
         };
+    }
+
+    private static string DescribeRow(string kind, Dictionary<string, string> row, List<string> setKeys)
+    {
+        string head = $"{kind} · mark {row.GetValueOrDefault("mark", "?")}"
+                    + (row.TryGetValue("level", out var lv) ? $", level {lv}" : "");
+        string body = setKeys.Count > 0
+            ? "You set: " + string.Join(", ", setKeys.Select(k => $"{k}={row.GetValueOrDefault(k, "")}"))
+            : "Using inherited values / defaults.";
+        return head + "\n" + body;
+    }
+
+    private static string Singular(string kind) =>
+        kind.EndsWith("s", StringComparison.OrdinalIgnoreCase) ? kind[..^1] : kind;
+
+    private static bool TryParseBool(string v, out bool b)
+    {
+        switch (v.Trim().ToLowerInvariant())
+        {
+            case "true": case "yes": case "1": case "on": b = true; return true;
+            case "false": case "no": case "0": case "off": b = false; return true;
+            default: b = false; return false;
+        }
     }
 
     private static JsonElement Schema(object shape) => JsonSerializer.SerializeToElement(shape);

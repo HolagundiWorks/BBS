@@ -31,12 +31,12 @@ public sealed class AssistantService
     /// Create the assistant if an API key is configured; otherwise return null so
     /// the feature stays inert. Opt-in by design.
     /// </summary>
-    public static AssistantService? TryCreate(IAppCommandBus bus, DispatcherQueue ui)
+    public static AssistantService? TryCreate(IAppCommandBus bus, IAssistantConfirm confirm, DispatcherQueue ui)
     {
         var key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
         if (string.IsNullOrWhiteSpace(key)) return null;
         var client = new AnthropicClient { ApiKey = key };
-        return new AssistantService(client, new AssistantTools(bus), ui);
+        return new AssistantService(client, new AssistantTools(bus, confirm), ui);
     }
 
     public async Task<string> AskAsync(string userText)
@@ -96,7 +96,7 @@ public sealed class AssistantService
                         Name = toolUse.Name,
                         Input = toolUse.Input
                     });
-                    string result = await OnUiAsync(() => _tools.Execute(toolUse.Name, toolUse.Input));
+                    string result = await OnUiAsync(() => _tools.ExecuteAsync(toolUse.Name, toolUse.Input));
                     toolResults.Add(new ToolResultBlockParam
                     {
                         ToolUseID = toolUse.ID,
@@ -119,12 +119,12 @@ public sealed class AssistantService
     }
 
     /// <summary>Run a tool handler on the UI thread and await its result (never blocks the UI thread).</summary>
-    private Task<string> OnUiAsync(Func<string> work)
+    private Task<string> OnUiAsync(Func<Task<string>> work)
     {
         var tcs = new TaskCompletionSource<string>();
-        bool queued = _ui.TryEnqueue(() =>
+        bool queued = _ui.TryEnqueue(async () =>
         {
-            try { tcs.SetResult(work()); }
+            try { tcs.SetResult(await work()); }
             catch (Exception ex) { tcs.SetException(ex); }
         });
         if (!queued)
@@ -142,8 +142,11 @@ public sealed class AssistantService
       + "what it returns. Quantities follow IS 456 / IS 1200 conventions.\n"
       + "- Use get_project_summary to understand the current project before answering questions "
       + "about it. Use navigate to take the user to a relevant page when that helps.\n"
-      + "- This is a read-only assistant: you can look things up, run the engine, and navigate, "
-      + "but you cannot add or edit project data yet. If asked to change data, say so and point "
-      + "the user to the right page.\n"
+      + "- You can change project data with add_element_row (add one RCC member) and "
+      + "update_setting (covers, markup %, concrete-from-RMC). Both apply in memory only and both "
+      + "require the user to approve the change in a confirmation dialog — that dialog IS the "
+      + "confirmation, so call the tool with the concrete change rather than asking in chat first. "
+      + "Make one clear change at a time and report exactly what changed (or that the user "
+      + "cancelled). Nothing is saved until the user saves the project.\n"
       + "- Be concise and direct. Lead with the answer; keep caveats brief.";
 }
