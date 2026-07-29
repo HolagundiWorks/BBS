@@ -33,7 +33,9 @@ public sealed class AssistantService
     /// </summary>
     public static AssistantService? TryCreate(IAppCommandBus bus, IAssistantConfirm confirm, DispatcherQueue ui)
     {
-        var key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+        var key = AssistantSettings.ApiKey;
+        if (string.IsNullOrWhiteSpace(key))
+            key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
         if (string.IsNullOrWhiteSpace(key)) return null;
         var client = new AnthropicClient { ApiKey = key };
         return new AssistantService(client, new AssistantTools(bus, confirm, client), ui);

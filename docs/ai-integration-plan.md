@@ -238,7 +238,8 @@ every page.
 - Uses the official `Anthropic` .NET SDK (`claude-opus-5`, adaptive thinking) via a **manual tool loop** in `AssistantService` — the SDK's `BetaToolRunner` handler-registration API isn't in the reference docs, so the loop is hand-written to stay on documented ground.
 - `run_calc` is restricted to the eight RCC kinds the engine's generate path handles (`columns`, `beams`, `pedestals`, `lintels`, `slabs`, `footings`, `walls`, `stairs`); it clones rows before `ExpandForGenerate` so preview never mutates the project. Civil BOQ uses different calculators — deferred.
 - The assistant is **inert without `ANTHROPIC_API_KEY`** (`AssistantService.TryCreate` returns null); the command bar then shows a one‑line hint instead of calling out.
-- **Not yet built here:** in‑app key entry in Settings, and streaming the reply token‑by‑token (both would improve UX but aren't required for read‑only Q&A).
+- **In‑app key entry (added):** on first use with no key, the command bar prompts for the Anthropic API key in a dialog and stores it via `AssistantSettings` under `%LocalAppData%\AQCCore\` (same folder as rate books). `TryCreate` reads the stored key first, then falls back to the `ANTHROPIC_API_KEY` env var. Storage is plain local file scoped to the user profile — not encryption; a DPAPI/credential‑vault upgrade is a possible follow‑up.
+- **Not yet built here:** streaming the reply token‑by‑token (would improve UX but isn't required for read‑only Q&A).
 
 **Phase 2 notes as built:**
 - Writes are gated by a **hard modal confirmation** (`IAssistantConfirm`, implemented on `MainWindow` with a `ContentDialog` mirroring `About_Click`) — the dialog, not the chat, is the confirmation. The tool loop went async (`ExecuteAsync` + an async UI marshal) so a handler can await the dialog.

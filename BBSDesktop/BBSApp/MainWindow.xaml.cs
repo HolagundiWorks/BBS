@@ -654,8 +654,13 @@ public sealed partial class MainWindow : Window, IAppCommandBus, IAssistantConfi
         _assistant ??= AssistantService.TryCreate(this, this, DispatcherQueue);
         if (_assistant is null)
         {
-            ShowAssistantReply("Set the ANTHROPIC_API_KEY environment variable to enable the assistant.");
-            return;
+            if (await PromptForKeyAsync())
+                _assistant = AssistantService.TryCreate(this, this, DispatcherQueue);
+            if (_assistant is null)
+            {
+                ShowAssistantReply("Assistant not enabled — no Anthropic API key provided.");
+                return;
+            }
         }
 
         _assistantBusy = true;
@@ -705,6 +710,41 @@ public sealed partial class MainWindow : Window, IAppCommandBus, IAssistantConfi
         catch
         {
             // e.g. another ContentDialog is already open — treat as declined.
+            return false;
+        }
+    }
+
+    /// <summary>Prompt for and store the Anthropic API key. Returns true if a key was saved.</summary>
+    private async Task<bool> PromptForKeyAsync()
+    {
+        var box = new PasswordBox { PlaceholderText = "sk-ant-…" };
+        var panel = new StackPanel { Spacing = 8, MinWidth = 320 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Paste your Anthropic API key to enable the assistant. "
+                 + "It is stored locally under your Windows user profile.",
+            TextWrapping = TextWrapping.Wrap
+        });
+        panel.Children.Add(box);
+        try
+        {
+            var dlg = new ContentDialog
+            {
+                Title = "Enable assistant",
+                Content = panel,
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = Content.XamlRoot
+            };
+            if (await dlg.ShowAsync() != ContentDialogResult.Primary) return false;
+            var key = box.Password?.Trim();
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            AssistantSettings.ApiKey = key;
+            return true;
+        }
+        catch
+        {
             return false;
         }
     }
