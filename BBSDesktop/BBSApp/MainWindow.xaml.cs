@@ -3,6 +3,7 @@
 
 using BBSApp.Models;
 using BBSApp.Services;
+using BBSApp.Services.Ai;
 using BBSApp.Views;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
@@ -17,7 +18,7 @@ using WinRT.Interop;
 
 namespace BBSApp;
 
-public sealed partial class MainWindow : Window
+public sealed partial class MainWindow : Window, IAppCommandBus, IAssistantConfirm
 {
     private sealed record NavCmd(string Tag, string Label, object? Icon);
 
@@ -25,10 +26,14 @@ public sealed partial class MainWindow : Window
 
     private readonly List<RibbonTab> _tabs = new();
     private readonly Dictionary<string, ToggleButton> _tabButtons = new(StringComparer.OrdinalIgnoreCase);
+    // Canonical navigable tags, matched case-sensitively to NavigateTo's switch arms.
+    private readonly HashSet<string> _navTags = new(StringComparer.Ordinal);
     private string _activeTab = "project";
     private string _activeTag = "dashboard";
     private DispatcherTimer? _toastTimer;
     private int _toastGeneration;
+    private AssistantService? _assistant;
+    private bool _assistantBusy;
 
     public MainWindow()
     {
@@ -176,6 +181,10 @@ public sealed partial class MainWindow : Window
             Cmd("settings_engineering", "Engineering", Glyph("\uE90F")),
             Cmd("settings_cost", "Cost %", Glyph("\uE8EF")),
         }));
+
+        _navTags.Clear();
+        foreach (var cmd in _tabs.SelectMany(t => t.Commands))
+            _navTags.Add(cmd.Tag);
     }
 
     private static NavCmd Cmd(string tag, string label, object? icon) => new(tag, label, icon);
@@ -414,7 +423,27 @@ public sealed partial class MainWindow : Window
     private void RibbonCommand_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement fe || fe.Tag is not string tag) return;
-        NavigateTo(tag);
+        Navigate(tag);
+    }
+
+    // ——— IAppCommandBus: the single external route into navigation ———
+
+    /// <summary>Canonical navigable ribbon tags, in ribbon order.</summary>
+    public IReadOnlyList<string> KnownTags =>
+        _tabs.SelectMany(t => t.Commands).Select(c => c.Tag).Distinct().ToArray();
+
+    /// <summary>
+    /// Navigate to a ribbon command tag. Returns <c>false</c> and does nothing for
+    /// an unknown tag, instead of falling through to the dashboard, so callers can
+    /// tell whether the request was understood.
+    /// </summary>
+    public bool Navigate(string tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return false;
+        var norm = tag.Trim();
+        if (!_navTags.Contains(norm)) return false;
+        NavigateTo(norm);
+        return true;
     }
 
     private void NavigateTo(string tag)
@@ -588,15 +617,29 @@ public sealed partial class MainWindow : Window
     {
         if (e.Key == VirtualKey.Enter)
         {
-            EvaluateCalc(selectResult: true);
             e.Handled = true;
+            string text = (CalcInput.Text ?? "").Trim();
+            // Arithmetic stays the instant path; anything else goes to the assistant.
+            if (QuickCalc.TryEvaluate(text, out var result))
+            {
+                CalcResult.Text = result;
+                CalcResult.Focus(FocusState.Programmatic);
+                CalcResult.SelectAll();
+            }
+            else if (!string.IsNullOrWhiteSpace(text))
+            {
+                _ = AskAssistantAsync(text);
+            }
         }
         else if (e.Key == VirtualKey.Escape)
         {
-            if (!string.IsNullOrEmpty(CalcInput.Text) || !string.IsNullOrEmpty(CalcResult.Text))
+            if (!string.IsNullOrEmpty(CalcInput.Text) || !string.IsNullOrEmpty(CalcResult.Text)
+                || AssistantReplyHost.Visibility == Visibility.Visible)
             {
                 CalcInput.Text = "";
                 CalcResult.Text = "";
+                AssistantReply.Text = "";
+                AssistantReplyHost.Visibility = Visibility.Collapsed;
             }
             else
             {
@@ -605,6 +648,136 @@ public sealed partial class MainWindow : Window
             }
             e.Handled = true;
         }
+    }
+
+    private async Task AskAssistantAsync(string prompt)
+    {
+        if (_assistantBusy) return;
+
+        _assistant ??= AssistantService.TryCreate(this, this, DispatcherQueue);
+        if (_assistant is null)
+        {
+            if (await PromptForKeyAsync())
+                _assistant = AssistantService.TryCreate(this, this, DispatcherQueue);
+            if (_assistant is null)
+            {
+                ShowAssistantReply("Assistant not enabled — no Anthropic API key provided.");
+                return;
+            }
+        }
+
+        _assistantBusy = true;
+        AssistantReply.Text = "";
+        AssistantReplyHost.Visibility = Visibility.Visible;
+        AssistantBusy.IsActive = true;
+        AssistantBusy.Visibility = Visibility.Visible;
+        try
+        {
+            string reply = await _assistant.AskAsync(prompt);
+            ShowAssistantReply(string.IsNullOrWhiteSpace(reply) ? "(no reply)" : reply);
+        }
+        catch (Exception ex) when (LooksLikeAuthError(ex))
+        {
+            // A stored key was rejected — clear it so the next ask re-prompts.
+            AssistantSettings.ApiKey = null;
+            _assistant = null;
+            ShowAssistantReply("That API key was rejected. Ask again to re-enter it.");
+        }
+        catch (Exception ex)
+        {
+            ShowAssistantReply($"Assistant error: {ex.Message}");
+        }
+        finally
+        {
+            AssistantBusy.IsActive = false;
+            AssistantBusy.Visibility = Visibility.Collapsed;
+            _assistantBusy = false;
+        }
+    }
+
+    private void ShowAssistantReply(string text)
+    {
+        AssistantReplyHost.Visibility = Visibility.Visible;
+        AssistantReply.Text = text;
+    }
+
+    // IAssistantConfirm — modal gate for any assistant-driven change to project state.
+    public async Task<bool> ConfirmAsync(string title, string details)
+    {
+        try
+        {
+            var dlg = new ContentDialog
+            {
+                Title = title,
+                Content = new TextBlock { Text = details, TextWrapping = TextWrapping.Wrap },
+                PrimaryButtonText = "Apply",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = Content.XamlRoot
+            };
+            return await dlg.ShowAsync() == ContentDialogResult.Primary;
+        }
+        catch
+        {
+            // e.g. another ContentDialog is already open — treat as declined.
+            return false;
+        }
+    }
+
+    /// <summary>Prompt for and store the Anthropic API key. Returns true if a key was saved.</summary>
+    private async Task<bool> PromptForKeyAsync()
+    {
+        var box = new PasswordBox { PlaceholderText = "sk-ant-…" };
+        var panel = new StackPanel { Spacing = 8, MinWidth = 320 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Paste your Anthropic API key to enable the assistant. "
+                 + "It is stored locally under your Windows user profile.",
+            TextWrapping = TextWrapping.Wrap
+        });
+        panel.Children.Add(box);
+        try
+        {
+            var dlg = new ContentDialog
+            {
+                Title = "Enable assistant",
+                Content = panel,
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = Content.XamlRoot
+            };
+            if (await dlg.ShowAsync() != ContentDialogResult.Primary) return false;
+            var key = box.Password?.Trim();
+            if (string.IsNullOrWhiteSpace(key)) return false;
+            AssistantSettings.ApiKey = key;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Heuristic: does this exception (or an inner one) look like an API-key/auth failure?
+    /// Uses only the exception type name and message so it needs no SDK type references.</summary>
+    private static bool LooksLikeAuthError(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            string name = e.GetType().Name;
+            if (name.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("Authentication", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("Forbidden", StringComparison.OrdinalIgnoreCase))
+                return true;
+            string m = e.Message ?? "";
+            if (m.Contains("api key", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("x-api-key", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("authentication", StringComparison.OrdinalIgnoreCase)
+                || m.Contains("401"))
+                return true;
+        }
+        return false;
     }
 
     private void CalcInput_TextChanged(object sender, TextChangedEventArgs e) =>
@@ -641,7 +814,7 @@ public sealed partial class MainWindow : Window
 
     private void SelectNavTag(string tag)
     {
-        NavigateTo(tag);
+        Navigate(tag);
     }
 
     // ——— Persona badge (read-only; declared under File → Project settings) ———

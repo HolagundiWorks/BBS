@@ -203,7 +203,7 @@
                         Spacing="8"
                         Canvas.ZIndex="100">
                 <Border x:Name="FloatingCalcPanel"
-                        Width="220"
+                        Width="320"
                         Padding="10"
                         Visibility="Collapsed"
                         Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
@@ -218,7 +218,7 @@
                     </Border.Shadow>
                     <StackPanel Spacing="6">
                         <Grid>
-                            <TextBlock Text="Calculator"
+                            <TextBlock Text="Calculator · Ask"
                                        FontSize="12" FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
                             <Button HorizontalAlignment="Right"
@@ -231,7 +231,7 @@
                             </Button>
                         </Grid>
                         <TextBox x:Name="CalcInput"
-                                 PlaceholderText="Expression"
+                                 PlaceholderText="Calculate or ask a question"
                                  FontSize="12"
                                  MinHeight="26"
                                  AcceptsReturn="False"
@@ -248,9 +248,27 @@
                                  TextWrapping="NoWrap"
                                  IsTabStop="True"
                                  AutomationProperties.Name="Calculator result"/>
+                        <Grid x:Name="AssistantReplyHost" Visibility="Collapsed">
+                            <ScrollViewer MaxHeight="240"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollMode="Disabled">
+                                <TextBlock x:Name="AssistantReply"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           IsTextSelectionEnabled="True"
+                                           AutomationProperties.Name="Assistant reply"/>
+                            </ScrollViewer>
+                            <ProgressRing x:Name="AssistantBusy"
+                                          IsActive="False"
+                                          Visibility="Collapsed"
+                                          Width="20" Height="20"
+                                          VerticalAlignment="Top"
+                                          HorizontalAlignment="Center"
+                                          Margin="0,4,0,0"/>
+                        </Grid>
                         <TextBlock FontSize="9"
                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                   Text="Enter · Esc clear"/>
+                                   Text="Enter to run · Esc to clear"/>
                     </StackPanel>
                 </Border>
 

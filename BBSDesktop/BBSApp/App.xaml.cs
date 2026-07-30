@@ -9,6 +9,9 @@ public partial class App : Application
 {
     public static MainWindow? MainWindow { get; set; }
 
+    /// <summary>App-wide navigation command surface (implemented by the main window).</summary>
+    public static Services.Ai.IAppCommandBus? CommandBus => MainWindow;
+
     public App()
     {
         InitializeComponent();
