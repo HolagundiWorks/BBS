@@ -1,0 +1,108 @@
+<Page
+    x:Class="BBSApp.Views.LinkRulesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="Transparent">
+    <Grid Style="{StaticResource PageRootStyle}"
+          Transitions="{StaticResource PageContentTransitions}"
+          RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <StackPanel Spacing="2" MaxWidth="760" HorizontalAlignment="Left">
+                <TextBlock Text="Item links" Style="{StaticResource PageTitleStyle}"/>
+                <TextBlock Style="{StaticResource PageSubtitleStyle}"
+                           Text="Model linked estimation items — plaster follows masonry, paint follows plaster, skirting follows floor perimeter. Rules are saved with the project."/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpacingS}"
+                        HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Button Content="Add rule" Style="{StaticResource SecondaryButtonStyle}"
+                        Click="AddRule_Click" AutomationProperties.Name="Add link rule"/>
+                <Button Content="Reset to defaults" Style="{StaticResource SecondaryButtonStyle}"
+                        Click="ResetDefaults_Click" AutomationProperties.Name="Reset link rules to defaults"/>
+                <Button Content="Refresh preview" Style="{StaticResource PrimaryButtonStyle}"
+                        Click="RefreshPreview_Click" AutomationProperties.Name="Refresh derivation preview"/>
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="1" Style="{StaticResource FluentCardCompactStyle}">
+            <StackPanel Spacing="8">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ComboBox x:Name="RuleCombo" Header="Rule" HorizontalAlignment="Stretch"
+                              SelectionChanged="RuleCombo_SelectionChanged"
+                              AutomationProperties.Name="Rule to edit"/>
+                    <ToggleSwitch x:Name="EnabledToggle" Grid.Column="1" Header="Enabled"
+                                  OnContent="On" OffContent="Off" VerticalAlignment="Bottom"/>
+                    <CheckBox x:Name="PerItemCheck" Grid.Column="2" Content="Per item"
+                              VerticalAlignment="Bottom" Margin="4,0,0,6"
+                              ToolTipService.ToolTip="One linked line per source item (keeps mark/level). Off = one aggregate line."/>
+                </Grid>
+
+                <TextBox x:Name="NameBox" Header="Rule name"
+                         PlaceholderText="e.g. Plaster from masonry (both faces)"/>
+
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="130"/>
+                        <ColumnDefinition Width="110"/>
+                        <ColumnDefinition Width="90"/>
+                    </Grid.ColumnDefinitions>
+                    <ComboBox x:Name="SourceCombo" Header="Source trade" HorizontalAlignment="Stretch"/>
+                    <ComboBox x:Name="TargetCombo" Grid.Column="1" Header="Target trade" HorizontalAlignment="Stretch"/>
+                    <ComboBox x:Name="BasisCombo" Grid.Column="2" Header="Basis" HorizontalAlignment="Stretch"
+                              SelectionChanged="BasisCombo_SelectionChanged"/>
+                    <NumberBox x:Name="FactorBox" Grid.Column="3" Header="Factor"
+                               SpinButtonPlacementMode="Compact" Minimum="0" SmallChange="0.1"
+                               AutomationProperties.Name="Multiplier factor"/>
+                    <TextBox x:Name="UnitBox" Grid.Column="4" Header="Unit"/>
+                </Grid>
+
+                <TextBox x:Name="NotesBox" Header="Notes"
+                         PlaceholderText="Optional — assumptions, IS-code reference, when to enable"/>
+
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpacingS}">
+                    <Button Content="Apply changes" Style="{StaticResource SecondaryButtonStyle}"
+                            Click="ApplyRule_Click"/>
+                    <Button Content="Delete rule" Style="{StaticResource SecondaryButtonStyle}"
+                            Click="DeleteRule_Click"/>
+                    <TextBlock x:Name="EquationText" VerticalAlignment="Center"
+                               FontSize="12" Opacity="0.8"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <InfoBar x:Name="Info" Grid.Row="2" IsOpen="False"/>
+
+        <Pivot Grid.Row="3" x:Name="MainPivot">
+            <PivotItem Header="Rules">
+                <Border Style="{StaticResource FluentCardStyle}" Padding="8">
+                    <Border x:Name="RulesHost"/>
+                </Border>
+            </PivotItem>
+            <PivotItem Header="Derivation preview">
+                <Grid RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="TotalsText" TextWrapping="Wrap" Opacity="0.85"/>
+                    <Border Grid.Row="1" Style="{StaticResource FluentCardStyle}" Padding="8">
+                        <Border x:Name="PreviewHost"/>
+                    </Border>
+                </Grid>
+            </PivotItem>
+        </Pivot>
+    </Grid>
+</Page>

@@ -96,6 +96,9 @@ public sealed class ProjectStore
     /// <summary>Sites, resources, employees, attendance and payroll.</summary>
     public OrgBook Org { get; } = new();
 
+    /// <summary>Derivation rules linking trades (masonry→plaster→paint, flooring→skirting …).</summary>
+    public LinkRuleBook LinkRules { get; } = new();
+
     /// <summary>Last calculated estimate snapshot (qty × rates).</summary>
     public EstimateResult? LastEstimate { get; set; }
     public string? LastEstimateRateBookVersionId { get; set; }
@@ -228,7 +231,7 @@ public sealed class ProjectStore
         return new JsonObject
         {
             ["format"] = "bbsproj",
-            ["version"] = 16,
+            ["version"] = 17,
             ["name"] = Name,
             ["project"] = Info.ToJson(),
             ["parties"] = Parties.ToJson(),
@@ -271,6 +274,7 @@ public sealed class ProjectStore
             ["accounts"] = Accounts.ToJson(),
             ["stores"] = Stores.ToJson(),
             ["org"] = Org.ToJson(),
+            ["link_rules"] = LinkRules.ToJson(),
             ["last_estimate"] = LastEstimate is null ? null : EstimateCalculator.ToJson(LastEstimate),
             ["last_estimate_rate_book_version_id"] = LastEstimateRateBookVersionId ?? ""
         };
@@ -348,6 +352,8 @@ public sealed class ProjectStore
         Accounts.LoadFrom(root["accounts"] as JsonObject);
         Stores.LoadFrom(root["stores"] as JsonObject);
         Org.LoadFrom(root["org"] as JsonObject);
+        LinkRules.LoadFrom(root["link_rules"] as JsonArray);
+        LinkRules.SeedIfEmpty();
         LastEstimate = EstimateCalculator.FromJson(root["last_estimate"] as JsonObject);
         LastEstimateRateBookVersionId = root["last_estimate_rate_book_version_id"]?.GetValue<string>();
         if (root["levels"] is JsonArray la)
@@ -570,6 +576,7 @@ public sealed class ProjectStore
         Accounts.Clear();
         Stores.Clear();
         Org.Clear();
+        LinkRules.ResetToDefaults();
         Levels.Clear();
         LastSummary = null;
         LastBbs = null;
@@ -585,6 +592,7 @@ public sealed class ProjectStore
     public void SeedDefaults()
     {
         EnsureDefaultLevels();
+        LinkRules.SeedIfEmpty();
         ContractBook.EnsureSeeded();
         Stores.EnsureSeeded();
         Org.EnsureSeeded();
