@@ -95,10 +95,21 @@
                 <Grid RowSpacing="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBlock x:Name="TotalsText" TextWrapping="Wrap" Opacity="0.85"/>
-                    <Border Grid.Row="1" Style="{StaticResource FluentCardStyle}" Padding="8">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpacingS}">
+                        <Button Content="Apply to sheets" Style="{StaticResource PrimaryButtonStyle}"
+                                Click="ApplyToSheets_Click"
+                                AutomationProperties.Name="Apply linked items to take-off sheets"/>
+                        <Button Content="Clear applied" Style="{StaticResource SecondaryButtonStyle}"
+                                Click="ClearApplied_Click"
+                                AutomationProperties.Name="Clear applied linked items"/>
+                        <TextBlock VerticalAlignment="Center" FontSize="12" Opacity="0.7"
+                                   Text="Writes derived rows into the take-off so they flow into BOQ &amp; estimate."/>
+                    </StackPanel>
+                    <TextBlock x:Name="TotalsText" Grid.Row="1" TextWrapping="Wrap" Opacity="0.85"/>
+                    <Border Grid.Row="2" Style="{StaticResource FluentCardStyle}" Padding="8">
                         <Border x:Name="PreviewHost"/>
                     </Border>
                 </Grid>

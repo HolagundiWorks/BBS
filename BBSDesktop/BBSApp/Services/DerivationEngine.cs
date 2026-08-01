@@ -11,12 +11,14 @@ public sealed class DerivedItem
     public string RuleId { get; set; } = "";
     public string RuleName { get; set; } = "";
     public string SourceTrade { get; set; } = "";
+    public string SourceTradeKey { get; set; } = "";
     public string SourceMark { get; set; } = "";
     public string Level { get; set; } = "";
     public LinkBasis Basis { get; set; }
     public double SourceQty { get; set; }
     public double Factor { get; set; }
     public string TargetTrade { get; set; } = "";
+    public string TargetTradeKey { get; set; } = "";
     public double TargetQty { get; set; }
     public string TargetUnit { get; set; } = "";
     /// <summary>True when this line's source was itself produced by an upstream rule (a chained link).</summary>
@@ -55,6 +57,7 @@ public static class DerivationEngine
         foreach (var c in CivilBoqCalculator.BuildAll(store, levels))
         {
             if (string.IsNullOrWhiteSpace(c.Element)) continue;
+            if (c.Linked) continue; // don't re-derive from already-applied link rows
             if (c.Element.Equals("Masonry", StringComparison.OrdinalIgnoreCase)) continue;
             var node = new NodeQty
             {
@@ -150,18 +153,76 @@ public static class DerivationEngine
             .ToList();
     }
 
+    /// <summary>
+    /// Materialise the enabled rules' derived quantities into the target take-off sheets as
+    /// tagged <c>link_applied</c> rows, so they flow into the BOQ and estimate. Idempotent:
+    /// clears prior applied rows first. Returns the number of rows written.
+    /// </summary>
+    public static int Apply(ProjectStore store, LinkRuleBook book, IReadOnlySet<string>? levels = null)
+    {
+        var items = Preview(store, book, levels);
+        ClearApplied(store);
+
+        int written = 0;
+        foreach (var it in items)
+        {
+            var sheet = store.SheetForTrade(it.TargetTradeKey);
+            if (sheet is null || it.TargetQty <= 0) continue;
+            sheet.Add(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["mark"] = $"LK-{it.SourceMark}",
+                ["level"] = it.Level,
+                ["link_applied"] = "1",
+                ["link_trade"] = it.TargetTradeKey,
+                ["derived_by"] = it.RuleId,
+                ["source"] = "auto_link",
+                ["source_mark"] = it.SourceMark,
+                ["qty"] = Inv(it.TargetQty),
+                ["unit"] = it.TargetUnit,
+                ["status"] = "linked",
+                ["notes"] = $"Linked · {it.RuleName}"
+            });
+            written++;
+        }
+        if (written > 0) store.Notify();
+        return written;
+    }
+
+    /// <summary>Remove all previously applied link rows from every target sheet. Returns rows removed.</summary>
+    public static int ClearApplied(ProjectStore store)
+    {
+        int removed = 0;
+        foreach (var t in LinkTradeRegistry.All)
+        {
+            var sheet = store.SheetForTrade(t.Key);
+            if (sheet is null) continue;
+            for (int i = sheet.Count - 1; i >= 0; i--)
+                if (sheet[i].TryGetValue("link_applied", out var v) && v == "1")
+                {
+                    sheet.RemoveAt(i);
+                    removed++;
+                }
+        }
+        if (removed > 0) store.Notify();
+        return removed;
+    }
+
+    private static string Inv(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
+
     private static DerivedItem Make(
         LinkRule rule, string mark, string level, double drive, double tq, bool chained) => new()
     {
         RuleId = rule.Id,
         RuleName = rule.Name,
         SourceTrade = LinkTradeRegistry.Display(rule.SourceTrade),
+        SourceTradeKey = rule.SourceTrade,
         SourceMark = mark,
         Level = level,
         Basis = rule.Basis,
         SourceQty = Math.Round(drive, 3),
         Factor = rule.Factor,
         TargetTrade = LinkTradeRegistry.Display(rule.TargetTrade),
+        TargetTradeKey = rule.TargetTrade,
         TargetQty = Math.Round(tq, 3),
         TargetUnit = string.IsNullOrWhiteSpace(rule.TargetUnit)
             ? LinkTradeRegistry.Unit(rule.TargetTrade)

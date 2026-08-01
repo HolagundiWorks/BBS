@@ -30,6 +30,8 @@ public sealed class CivilLine
     public double LengthM { get; set; }
     public double BreadthM { get; set; }
     public double HeightM { get; set; }
+    /// <summary>True for rows materialised from a link rule (DerivationEngine.Apply); excluded from re-derivation.</summary>
+    public bool Linked { get; set; }
 }
 
 /// <summary>
@@ -209,8 +211,43 @@ public static class CivilBoqCalculator
         return po;
     }
 
+    /// <summary>A row materialised by DerivationEngine.Apply — carries its quantity directly, bypassing geometry.</summary>
+    private static bool IsLinkApplied(Dictionary<string, string> r) =>
+        S(r, "link_applied", "") == "1" && F(r, "qty") > 0;
+
+    private static CivilLine? LinkAppliedLine(Dictionary<string, string> r)
+    {
+        double qty = F(r, "qty");
+        if (qty <= 0) return null;
+        string unit = S(r, "unit", "m²");
+        var line = new CivilLine
+        {
+            Element = S(r, "link_trade", ""),
+            Mark = S(r, "mark", "LK"),
+            Level = MaterialsCalculator.RowLevel(r),
+            Description = S(r, "notes", "Linked item"),
+            Unit = unit,
+            Qty = Round3(qty),
+            Linked = true
+        };
+        if (unit.Contains("m³", StringComparison.OrdinalIgnoreCase) || unit.Contains("m3", StringComparison.OrdinalIgnoreCase))
+            line.VolumeM3 = Round3(qty);
+        else if (unit.Equals("m", StringComparison.OrdinalIgnoreCase))
+            line.LengthM = Round3(qty);
+        else if (!unit.Contains("nos", StringComparison.OrdinalIgnoreCase))
+            line.AreaM2 = Round3(qty);
+        return line;
+    }
+
     private static IEnumerable<CivilLine> LinesForRow(string kind, Dictionary<string, string> r)
     {
+        if (IsLinkApplied(r))
+        {
+            var linked = LinkAppliedLine(r);
+            if (linked is not null) yield return linked;
+            yield break;
+        }
+
         IEnumerable<CivilLine> raw = kind switch
         {
             "masonry" => MasonryLines(r),

@@ -134,6 +134,31 @@ public sealed class ProjectStore
 
     public void Notify() { IsDirty = true; Changed?.Invoke(); }
 
+    /// <summary>Take-off sheet for a link-rule trade key (see LinkTradeRegistry). Null when not writable
+    /// (e.g. Shuttering, which is always rebuilt from RCC). Used by DerivationEngine.Apply.</summary>
+    public ObservableCollection<Dictionary<string, string>>? SheetForTrade(string? tradeKey) =>
+        string.IsNullOrWhiteSpace(tradeKey) ? null : tradeKey.Trim().ToLowerInvariant() switch
+        {
+            "masonry" => MasonryWalls,
+            "plaster" => Plaster,
+            "painting" => Painting,
+            "flooring" => Flooring,
+            "skirting" => Skirting,
+            "screed" => Screed,
+            "vdf" => Vdf,
+            "waterproofing" => Waterproofing,
+            "dpc" => Dpc,
+            "coping" => Coping,
+            "parapet" => Parapet,
+            "pcc" => PccBeds,
+            "ssm" => SizeStone,
+            "earthwork" => Earthwork,
+            "plinth protection" or "plinth_protection" => PlinthProtection,
+            "doors" => Doors,
+            "windows" => Windows,
+            _ => null
+        };
+
     public string[] LevelIds() => Levels.Select(l => l.Id).ToArray();
 
     public LevelDef? FindLevel(string id) => Levels.FirstOrDefault(l => l.Id == id);

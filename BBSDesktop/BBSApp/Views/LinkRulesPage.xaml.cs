@@ -215,6 +215,56 @@ public sealed partial class LinkRulesPage : Page
         MainPivot.SelectedIndex = 1;
     }
 
+    private async void ApplyToSheets_Click(object sender, RoutedEventArgs e)
+    {
+        var items = DerivationEngine.Preview(ProjectStore.Current, Book);
+        var totals = DerivationEngine.Totals(items);
+        if (totals.Count == 0)
+        {
+            Warn("Nothing to apply", "No linked quantities yet — add take-off, then Refresh preview.");
+            return;
+        }
+
+        string list = string.Join("\n", totals.Select(t =>
+            $"  •  {t.Trade}   {t.Qty.ToString("0.##", CultureInfo.InvariantCulture)} {t.Unit}   ({t.Lines})"));
+        var panel = new StackPanel { Spacing = 10 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "These linked quantities will be written into the take-off sheets, so they flow into the BOQ and estimate:",
+            TextWrapping = TextWrapping.Wrap
+        });
+        panel.Children.Add(new TextBlock { Text = list, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas") });
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Previously applied link rows are replaced. If a target trade is also measured directly or via Finishes reconcile (plaster, paint), applying here adds on top — use one route, not both.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.75
+        });
+
+        var dlg = new ContentDialog
+        {
+            Title = "Apply linked items?",
+            Content = panel,
+            PrimaryButtonText = "Apply",
+            CloseButtonText = "Cancel",
+            XamlRoot = XamlRoot,
+            DefaultButton = ContentDialogButton.Primary
+        };
+        if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
+
+        int n = DerivationEngine.Apply(ProjectStore.Current, Book);
+        RefreshPreview();
+        Success("Applied", $"{n} linked row(s) written to take-off sheets — now in Quantities / Estimate. Use Clear applied to undo.");
+    }
+
+    private void ClearApplied_Click(object sender, RoutedEventArgs e)
+    {
+        int n = DerivationEngine.ClearApplied(ProjectStore.Current);
+        RefreshPreview();
+        if (n > 0) Success("Cleared", $"Removed {n} applied link row(s) from the take-off sheets.");
+        else Warn("Nothing to clear", "No applied link rows found.");
+    }
+
     private void BasisCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loading) return;
