@@ -1,0 +1,146 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// AQC-Core — estimation linked-item data model (logical ERD / schema)
+//
+// This is the RELATIONAL / ERD view of the model. The app currently persists it
+// as JSON (.bbsproj, schema version 17); these tables are the logical equivalent,
+// centred on the link-rule derivation engine (trade → link_rule → derived_item).
+//
+// Open in a designer:
+//   • dbdiagram.io  — New Diagram → Import → paste this file (DBML)
+//   • dbdocs.io     — `dbdocs build aqc-core.dbml`
+// ─────────────────────────────────────────────────────────────────────────────
+
+Project aqc_core {
+  database_type: 'Generic'
+  Note: 'AQC-Core (Human Centric Works) — quantity take-off + costing. Linked-item estimation: quantities of one trade derive from another (masonry→plaster→paint, flooring→skirting).'
+}
+
+// ── Reference / lookup ───────────────────────────────────────────────────────
+
+Table trade {
+  key           varchar [pk, note: 'Trade node key = CivilLine.Element, e.g. "Masonry"']
+  display       varchar [note: 'UI label, e.g. "Plastering"']
+  unit          varchar [note: 'm² | m³ | m | nos']
+  default_basis varchar [note: 'Area | Volume | Length | Perimeter | Count']
+  Note: 'The linkable trades — graph nodes of the derivation model (LinkTradeRegistry).'
+}
+
+// ── Project & measurement ────────────────────────────────────────────────────
+
+Table project {
+  id             varchar [pk]
+  name           varchar
+  format_version int     [note: 'bbsproj schema version (17)']
+}
+
+Table level {
+  id                 varchar [pk]
+  project_id         varchar [ref: > project.id]
+  name               varchar
+  height_mm          int
+  slab_thickness_mm  int
+  beam_depth_mm      int
+}
+
+Table takeoff_item {
+  id          varchar [pk]
+  project_id  varchar [ref: > project.id]
+  trade_key   varchar [ref: > trade.key]
+  mark        varchar  [note: 'Item mark, e.g. MW1, C1']
+  level_id    varchar [ref: > level.id, null]
+  length_m    double
+  breadth_m   double
+  height_m    double
+  area_m2     double
+  volume_m3   double
+  qty         double
+  unit        varchar
+  source      varchar  [note: 'manual | auto_wall | from_plaster | …']
+  source_mark varchar  [note: 'Provenance: parent item this row derives from']
+  notes       varchar
+  Note: 'Unified measurement rows — one per item per trade sheet (masonry, plaster, flooring…).'
+}
+
+// ── Linked-item derivation engine ────────────────────────────────────────────
+
+Table link_rule {
+  id           varchar [pk]
+  project_id   varchar [ref: > project.id]
+  name         varchar
+  enabled      boolean
+  source_trade varchar [ref: > trade.key, note: 'Producer trade']
+  target_trade varchar [ref: > trade.key, note: 'Consumer trade']
+  basis        varchar [note: 'Area | Volume | Length | Perimeter | Count']
+  factor       double  [note: 'target_qty = factor × source[basis]']
+  target_unit  varchar
+  per_item     boolean [note: 'true: one linked line per source item; false: one aggregate']
+  notes        varchar
+  Note: 'A derivation edge. e.g. Plaster = 2 × Masonry area; Painting = 1 × Plaster area.'
+}
+
+Table derived_item {
+  id           varchar [pk]
+  rule_id      varchar [ref: > link_rule.id]
+  source_trade varchar [ref: > trade.key]
+  source_mark  varchar
+  level_id     varchar [ref: > level.id, null]
+  source_qty   double
+  basis        varchar
+  factor       double
+  target_trade varchar [ref: > trade.key]
+  target_qty   double
+  target_unit  varchar
+  chained      boolean [note: 'Source was itself produced by an upstream rule']
+  Note: 'Engine output (computed by DerivationEngine). Logically a view over takeoff_item × link_rule.'
+}
+
+// ── Rates & priced estimate ──────────────────────────────────────────────────
+
+Table rate_book_version {
+  id    varchar [pk]
+  name  varchar
+  notes varchar
+}
+
+Table rate_item {
+  id          varchar [pk]
+  version_id  varchar [ref: > rate_book_version.id]
+  code        varchar [note: 'Stable rate code, e.g. MSN-BRICK-M3, PL-STD, PT-STD']
+  category    varchar
+  description varchar
+  unit        varchar
+  rate        double
+
+  indexes {
+    (version_id, code) [unique]
+  }
+}
+
+Table estimate {
+  id                   varchar [pk]
+  project_id           varchar [ref: > project.id]
+  rate_book_version_id varchar [ref: > rate_book_version.id]
+  base_total           double
+  grand_total          double
+}
+
+Table estimate_line {
+  id           varchar [pk]
+  estimate_id  varchar [ref: > estimate.id]
+  rate_item_id varchar [ref: > rate_item.id, null]
+  code         varchar
+  category     varchar
+  description  varchar
+  unit         varchar
+  qty          double
+  rate         double
+  amount       double
+  level_id     varchar [ref: > level.id, null]
+  mark         varchar
+  length_m     double
+  breadth_m    double
+  height_m     double
+  area_m2      double
+  volume_m3    double
+  Note: 'Priced BOQ line: qty × rate = amount. Qty flows from takeoff_item / derived_item.'
+}
