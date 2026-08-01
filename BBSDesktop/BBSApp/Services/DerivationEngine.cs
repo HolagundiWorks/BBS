@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Human Centric Works, Hospet
 
+using System.Globalization;
+
 namespace BBSApp.Services;
 
 /// <summary>One computed linked-item line produced by a <see cref="LinkRule"/>.</summary>
@@ -47,9 +49,13 @@ public static class DerivationEngine
         var work = new Dictionary<string, List<NodeQty>>(StringComparer.OrdinalIgnoreCase);
 
         // 1. Seed the graph from the measured civil BOQ (source of truth, SI units).
+        //    Masonry is handled separately below: a 230 mm wall is measured by volume,
+        //    so its BOQ line carries no face area — but Area-basis links (→ plaster,
+        //    paint) need the wall face area.
         foreach (var c in CivilBoqCalculator.BuildAll(store, levels))
         {
             if (string.IsNullOrWhiteSpace(c.Element)) continue;
+            if (c.Element.Equals("Masonry", StringComparison.OrdinalIgnoreCase)) continue;
             var node = new NodeQty
             {
                 Mark = string.IsNullOrWhiteSpace(c.Mark) ? "—" : c.Mark,
@@ -61,6 +67,27 @@ public static class DerivationEngine
                 Count = c.Unit.Contains("nos", StringComparison.OrdinalIgnoreCase) ? c.Qty : 1
             };
             AddNode(work, c.Element, node);
+        }
+
+        // Masonry nodes carry the net area of ONE face (opening-deducted) and the wall
+        // run length — so Area-basis rules give both faces at factor 2, and Length-basis
+        // rules (→ DPC) read the run. Same geometry as the finishes reconcile flow.
+        foreach (var w in store.MasonryWalls)
+        {
+            double L = Mm(w, "length"), H = Mm(w, "height");
+            if (L <= 0 || H <= 0) continue;
+            string level = MaterialsCalculator.RowLevel(w);
+            if (levels is not null && level.Length > 0 && !levels.Contains(level)) continue;
+            string rule = Row(w, "deduct_rule", "IS1200 masonry");
+            var (_, _, netMm2, _) = CivilBoqCalculator.DeductFaceArea(L, H, w, rule, false);
+            AddNode(work, "Masonry", new NodeQty
+            {
+                Mark = Row(w, "mark", "MW"),
+                Level = level,
+                AreaM2 = netMm2 / 1e6,
+                LengthM = L / 1000.0,
+                Count = 1
+            });
         }
 
         // 2. Run rules in producer-before-consumer order so chains resolve.
@@ -167,6 +194,13 @@ public static class DerivationEngine
         }
         list.Add(node);
     }
+
+    private static double Mm(Dictionary<string, string> r, string key) =>
+        r.TryGetValue(key, out var v)
+        && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : 0;
+
+    private static string Row(Dictionary<string, string> r, string key, string def) =>
+        r.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v) ? v.Trim() : def;
 
     private static double Drive(NodeQty n, LinkBasis basis) => basis switch
     {
