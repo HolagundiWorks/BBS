@@ -340,8 +340,18 @@ public static class EstimateCalculator
     public static string InferCivilCode(CivilLine c)
     {
         if (!string.IsNullOrWhiteSpace(c.ItemCode)) return c.ItemCode.Trim();
-        string el = c.Element ?? "";
-        string unit = c.Unit ?? "";
+        return CodeForElement(c.Element ?? "", c.Unit ?? "");
+    }
+
+    /// <summary>
+    /// Canonical rate code for a civil / finish trade element (unit disambiguates masonry m²/m³).
+    /// Shared by the estimate and the linked-item derivation so applied link rows price on the
+    /// same codes the estimate would infer — no drift between the two.
+    /// </summary>
+    public static string CodeForElement(string element, string unit)
+    {
+        string el = element ?? "";
+        unit ??= "";
         if (el.Equals("Masonry", StringComparison.OrdinalIgnoreCase))
             return unit.Equals("m²", StringComparison.OrdinalIgnoreCase) ? "MSN-BRICK-M2" : "MSN-BRICK-M3";
         if (el.Equals("Plaster", StringComparison.OrdinalIgnoreCase)) return "PL-STD";

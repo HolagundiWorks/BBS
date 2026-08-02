@@ -33,8 +33,11 @@ plaster = 2 × masonry face area, painting = plaster area, skirting = flooring
 perimeter, and chained combinations. Editable rules with a standard
 India-practice library, a chained derivation preview, and **Apply-to-sheets**
 that materialises derived quantities into the take-off so they flow into the BOQ
-and estimate (idempotent; undoable via *Clear applied*). `.bbsproj` bumped to
-**v17** (`link_rules`).
+and estimate (idempotent; undoable via *Clear applied*). The preview and Apply
+dialog **price** the derived quantities against the active rate book — rate and
+amount per line, a total cost, and any unpriced codes — using the same canonical
+rate codes as the estimate so applied rows price consistently. `.bbsproj` bumped
+to **v17** (`link_rules`).
 
 ### AI assistant (opt-in)
 A copilot on the command bar that drives the same code paths a user would. The
@@ -62,18 +65,17 @@ stored encrypted with Windows DPAPI, or read from `ANTHROPIC_API_KEY`).
 
 Ordered roughly by value-to-effort. None of these are started.
 
-1. **Priced linked items — rates for derived quantities.** Map link-rule target
-   trades to stable rate codes (`rate_item.code`, see the ERD) so applied linked
-   rows carry a rate automatically and price straight into the estimate, instead
-   of only contributing quantity.
-2. **Streaming AI replies.** Render the assistant's answer token-by-token
+1. **Streaming AI replies.** Render the assistant's answer token-by-token
    (`Messages.CreateStreaming`) for responsiveness on long answers; the manual
    tool loop already isolates the request call.
-3. **Civil-BOQ writes via the assistant.** Extend `add_element_row` (and add
+2. **Civil-BOQ writes via the assistant.** Extend `add_element_row` (and add
    edit/delete) beyond the eight RCC kinds to masonry, flooring, plaster, etc.,
    respecting wall-build / finish-derivation coupling.
-4. **Level-aware assistant edits.** Let the assistant create/select levels so
+3. **Level-aware assistant edits.** Let the assistant create/select levels so
    member and take-off edits can target a storey directly.
+4. **Per-line rate overrides for linked items.** Today derived rows price on the
+   trade's canonical rate code; a future step could let a rule pin a specific
+   rate code or a manual rate for its derived lines.
 
 ## Deferred 💤
 

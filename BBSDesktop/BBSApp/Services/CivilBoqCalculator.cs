@@ -223,6 +223,7 @@ public static class CivilBoqCalculator
         var line = new CivilLine
         {
             Element = S(r, "link_trade", ""),
+            ItemCode = S(r, "item_code", ""),
             Mark = S(r, "mark", "LK"),
             Level = MaterialsCalculator.RowLevel(r),
             Description = S(r, "notes", "Linked item"),

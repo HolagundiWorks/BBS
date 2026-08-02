@@ -231,8 +231,9 @@ public sealed class AssistantTools
                         + "currently derive. Link rules compute one trade's quantity from another "
                         + "(e.g. plaster = 2 × masonry face area, painting = 1 × plaster area, "
                         + "skirting = flooring perimeter). Includes each rule's source/target/basis/"
-                        + "factor and the derived totals per target trade from the current take-off. "
-                        + "Read-only.",
+                        + "factor, the derived totals per target trade from the current take-off, and "
+                        + "the derived cost priced against the active rate book (with any unpriced "
+                        + "codes). Read-only.",
             InputSchema = new() { Properties = new Dictionary<string, JsonElement>() }
         },
         new Tool
@@ -677,6 +678,11 @@ public sealed class AssistantTools
             });
 
         var items = DerivationEngine.Preview(ProjectStore.Current, book);
+
+        RateBookStore.Current.EnsureLoaded();
+        var version = RateBookStore.Current.ActiveOrFirst();
+        var (costTotal, missing) = DerivationEngine.Price(items, version);
+
         var totals = new JsonArray();
         foreach (var t in DerivationEngine.Totals(items))
             totals.Add(new JsonObject
@@ -687,10 +693,16 @@ public sealed class AssistantTools
                 ["lines"] = t.Lines
             });
 
+        var missingArr = new JsonArray();
+        foreach (var m in missing) missingArr.Add(m);
+
         return new JsonObject
         {
             ["rules"] = rules,
             ["derived_totals"] = totals,
+            ["rate_book"] = version?.Name,
+            ["derived_cost"] = version is null ? null : (JsonNode)Math.Round(costTotal, 2),
+            ["unpriced_codes"] = missingArr,
             ["trade_keys"] = new JsonArray(LinkTradeKeys.Select(k => (JsonNode)k).ToArray())
         }.ToJsonString();
     }
@@ -766,18 +778,28 @@ public sealed class AssistantTools
             return "No linked quantities to apply — add take-off for the source trades (masonry, "
                  + "flooring …) and enable rules, then try again.";
 
+        RateBookStore.Current.EnsureLoaded();
+        var version = RateBookStore.Current.ActiveOrFirst();
+        var (costTotal, missing) = DerivationEngine.Price(items, version);
+
         string list = string.Join("\n", totals.Select(t =>
             $"  • {t.Trade}  {t.Qty.ToString("0.##", CultureInfo.InvariantCulture)} {t.Unit}  ({t.Lines} line(s))"));
+        string costLine = version is null
+            ? ""
+            : $"\n\nDerived cost ≈ ₹{costTotal.ToString("N2", CultureInfo.InvariantCulture)} at {version.Name} rates"
+              + (missing.Count > 0 ? $" ({missing.Count} code(s) unpriced)" : "");
         string details = "These linked quantities will be written into the take-off sheets so they "
-                       + "flow into the BOQ and estimate. Previously applied link rows are replaced:\n\n" + list;
+                       + "flow into the BOQ and estimate. Previously applied link rows are replaced:\n\n"
+                       + list + costLine;
         if (!await _confirm.ConfirmAsync("Apply linked items?", details))
             return "Cancelled — no linked quantities applied.";
 
         int n = DerivationEngine.Apply(store, book);
         AppNotify.Success("Linked items applied", $"{n} row(s) written to take-off sheets");
         _bus.Navigate("links");
+        string costMsg = version is null ? "" : $" Derived cost ≈ ₹{costTotal.ToString("N2", CultureInfo.InvariantCulture)} at {version.Name} rates.";
         return $"Applied {n} linked row(s) to the take-off sheets — they now flow into Quantities "
-             + "and the Estimate. They can be undone from the Item links page (Clear applied).";
+             + $"and the Estimate.{costMsg} They can be undone from the Item links page (Clear applied).";
     }
 
     private static OpeningScheduleLinker.ScheduleKind ParseKind(string k, TakeoffItem item) =>

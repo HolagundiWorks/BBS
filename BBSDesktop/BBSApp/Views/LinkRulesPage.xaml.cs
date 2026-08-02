@@ -225,6 +225,10 @@ public sealed partial class LinkRulesPage : Page
             return;
         }
 
+        RateBookStore.Current.EnsureLoaded();
+        var version = RateBookStore.Current.ActiveOrFirst();
+        var (costTotal, missing) = DerivationEngine.Price(items, version);
+
         string list = string.Join("\n", totals.Select(t =>
             $"  •  {t.Trade}   {t.Qty.ToString("0.##", CultureInfo.InvariantCulture)} {t.Unit}   ({t.Lines})"));
         var panel = new StackPanel { Spacing = 10 };
@@ -234,6 +238,12 @@ public sealed partial class LinkRulesPage : Page
             TextWrapping = TextWrapping.Wrap
         });
         panel.Children.Add(new TextBlock { Text = list, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas") });
+        if (version is not null)
+        {
+            string costLine = $"Derived cost ≈ ₹{costTotal.ToString("N2", CultureInfo.InvariantCulture)} at {version.Name} rates"
+                            + (missing.Count > 0 ? $"  ({missing.Count} code(s) unpriced: {string.Join(", ", missing)})" : "");
+            panel.Children.Add(new TextBlock { Text = costLine, TextWrapping = TextWrapping.Wrap });
+        }
         panel.Children.Add(new TextBlock
         {
             Text = "Previously applied link rows are replaced. If a target trade is also measured directly or via Finishes reconcile (plaster, paint), applying here adds on top — use one route, not both.",
@@ -310,6 +320,11 @@ public sealed partial class LinkRulesPage : Page
     private void RefreshPreview()
     {
         var items = DerivationEngine.Preview(ProjectStore.Current, Book);
+
+        RateBookStore.Current.EnsureLoaded();
+        var version = RateBookStore.Current.ActiveOrFirst();
+        var (costTotal, missing) = DerivationEngine.Price(items, version);
+
         var rows = items.Select(i => (IReadOnlyList<string>)new[]
         {
             i.RuleName,
@@ -321,11 +336,14 @@ public sealed partial class LinkRulesPage : Page
             "× " + i.Factor.ToString("0.###", CultureInfo.InvariantCulture),
             i.TargetTrade,
             i.TargetQty.ToString("0.###", CultureInfo.InvariantCulture),
-            i.TargetUnit
+            i.TargetUnit,
+            i.RateCode,
+            i.RateMissing ? "—" : i.Rate.ToString("0.00", CultureInfo.InvariantCulture),
+            i.RateMissing ? "no rate" : i.Amount.ToString("0.00", CultureInfo.InvariantCulture)
         }).ToList();
 
         _previewTable.SetTable(
-            new[] { "Rule", "Source", "Mark", "Level", "Source qty", "Basis", "Factor", "Target", "Qty", "Unit" },
+            new[] { "Rule", "Source", "Mark", "Level", "Source qty", "Basis", "Factor", "Target", "Qty", "Unit", "Code", "Rate (₹)", "Amount (₹)" },
             rows);
 
         var totals = DerivationEngine.Totals(items);
@@ -337,7 +355,11 @@ public sealed partial class LinkRulesPage : Page
         {
             string summary = string.Join("   ·   ",
                 totals.Select(t => $"{t.Trade} {t.Qty.ToString("0.##", CultureInfo.InvariantCulture)} {t.Unit} ({t.Lines})"));
-            TotalsText.Text = "Derived totals:  " + summary + "     ⭑ = chained link.";
+            string cost = version is null
+                ? "  ·  no rate book to price against"
+                : $"  ·  Derived cost ≈ ₹{costTotal.ToString("N2", CultureInfo.InvariantCulture)} ({version.Name})"
+                  + (missing.Count > 0 ? $"  ·  {missing.Count} code(s) unpriced: {string.Join(", ", missing)}" : "");
+            TotalsText.Text = "Derived totals:  " + summary + cost + "     ⭑ = chained link.";
         }
     }
 

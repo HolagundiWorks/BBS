@@ -23,6 +23,16 @@ public sealed class DerivedItem
     public string TargetUnit { get; set; } = "";
     /// <summary>True when this line's source was itself produced by an upstream rule (a chained link).</summary>
     public bool Chained { get; set; }
+
+    // ── Pricing (filled by DerivationEngine.Price; zero until then) ──
+    /// <summary>Rate code this derived quantity prices on (see EstimateCalculator.CodeForElement).</summary>
+    public string RateCode { get; set; } = "";
+    /// <summary>Unit rate from the priced rate book; 0 when the code has no rate.</summary>
+    public double Rate { get; set; }
+    /// <summary>TargetQty × Rate.</summary>
+    public double Amount { get; set; }
+    /// <summary>True when the rate book has no rate for <see cref="RateCode"/>.</summary>
+    public bool RateMissing { get; set; }
 }
 
 /// <summary>
@@ -138,6 +148,44 @@ public static class DerivationEngine
         return results;
     }
 
+    /// <summary>
+    /// Price a derivation preview against a rate-book version: fills <see cref="DerivedItem.RateCode"/>,
+    /// <see cref="DerivedItem.Rate"/> and <see cref="DerivedItem.Amount"/> on each item and returns the
+    /// priced grand total plus any codes the rate book has no rate for. Uses the same canonical codes as
+    /// the estimate (<see cref="EstimateCalculator.CodeForElement"/>).
+    /// </summary>
+    public static (double Total, IReadOnlyList<string> MissingCodes) Price(
+        IReadOnlyList<DerivedItem> items, RateBookVersion? version)
+    {
+        var missing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (version is null)
+        {
+            foreach (var it in items) { it.RateCode = EstimateCalculator.CodeForElement(it.TargetTradeKey, it.TargetUnit); it.Rate = 0; it.Amount = 0; it.RateMissing = true; }
+            return (0, Array.Empty<string>());
+        }
+
+        var index = RateBookStore.Current.IndexByCode(version);
+        double total = 0;
+        foreach (var it in items)
+        {
+            it.RateCode = EstimateCalculator.CodeForElement(it.TargetTradeKey, it.TargetUnit);
+            if (index.TryGetValue(it.RateCode, out var ri))
+            {
+                it.Rate = ri.Rate;
+                it.RateMissing = false;
+            }
+            else
+            {
+                it.Rate = 0;
+                it.RateMissing = true;
+                missing.Add(it.RateCode);
+            }
+            it.Amount = Math.Round(it.TargetQty * it.Rate, 2);
+            total += it.Amount;
+        }
+        return (Math.Round(total, 2), missing.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
     /// <summary>Roll a derivation preview up to one total per target trade.</summary>
     public static IReadOnlyList<(string Trade, string Unit, double Qty, int Lines)> Totals(
         IReadOnlyList<DerivedItem> items)
@@ -174,6 +222,7 @@ public static class DerivationEngine
                 ["level"] = it.Level,
                 ["link_applied"] = "1",
                 ["link_trade"] = it.TargetTradeKey,
+                ["item_code"] = EstimateCalculator.CodeForElement(it.TargetTradeKey, it.TargetUnit),
                 ["derived_by"] = it.RuleId,
                 ["source"] = "auto_link",
                 ["source_mark"] = it.SourceMark,

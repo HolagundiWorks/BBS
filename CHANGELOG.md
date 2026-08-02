@@ -17,7 +17,10 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   (e.g. plaster = 2 × masonry face area, painting = plaster area, skirting = flooring perimeter).
   Editable rules with a standard India-practice library, a chained derivation preview, and
   Apply-to-sheets to materialise the derived quantities into the take-off so they flow into the
-  BOQ and estimate (idempotent, undoable via Clear applied).
+  BOQ and estimate (idempotent, undoable via Clear applied). The preview and Apply dialog now also
+  **price the derived quantities** against the active rate book (rate/amount per line, a total cost,
+  and any unpriced codes), using the same canonical rate codes as the estimate so applied link rows
+  price consistently. The AI `list_link_rules` tool reports the derived cost too.
 
 ### Changed
 - Project file (`.bbsproj`) format bumped to **v17** — adds the linked-item derivation rules
