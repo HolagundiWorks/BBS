@@ -5,7 +5,8 @@ planned next. Detail lives in the linked documents; this page is the map.
 
 - Released history → [CHANGELOG.md](../CHANGELOG.md)
 - AI assistant design + phased rollout → [ai-integration-plan.md](ai-integration-plan.md)
-- Linked-item data model (ERD/SQL) → [schema/aqc-core.dbml](schema/aqc-core.dbml)
+- Full logical ERD (ERD/SQL) → [schema/aqc-core.dbml](schema/aqc-core.dbml)
+- Item-relationship model (material composition + item→item), generated → [schema/aqc-core-derivation.dbml](schema/aqc-core-derivation.dbml)
 
 Legend: ✅ shipped · 🚧 on `main`, unreleased · 🔭 planned · 💤 deferred
 
@@ -40,6 +41,17 @@ rate codes as the estimate so applied rows price consistently, and a rule can
 **pin a specific rate code** or a **manual unit rate** for its derived lines (a
 manual rate prices even with no rate-book entry). `.bbsproj` bumped to **v17**
 (`link_rules`).
+
+### Data-model export (DBML / SQL)
+A generator (`SchemaExport`) emits the estimation item-relationship model as DBML
+(for [dbdiagram.io](https://dbdiagram.io)) and SQL, covering both **item →
+material** composition (concrete → cement + fine + coarse aggregate via mix
+recipes; masonry → bricks + mortar; RCC → steel) and **item → item** derivation
+(brick wall → plaster → paint; flooring → skirting). It pulls items, materials,
+mix ratios and the standard link rules from the live registries, so the model
+tracks the code rather than drifting. Run it from **Item links → Export data
+model**; a committed snapshot lives in `docs/schema/aqc-core-derivation.dbml`
+(+ `.sql`).
 
 ### AI assistant (opt-in)
 A copilot on the command bar that drives the same code paths a user would. The

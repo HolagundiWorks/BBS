@@ -25,6 +25,9 @@
                         Click="AddRule_Click" AutomationProperties.Name="Add link rule"/>
                 <Button Content="Reset to defaults" Style="{StaticResource SecondaryButtonStyle}"
                         Click="ResetDefaults_Click" AutomationProperties.Name="Reset link rules to defaults"/>
+                <Button Content="Export data model" Style="{StaticResource SecondaryButtonStyle}"
+                        Click="ExportSchema_Click" AutomationProperties.Name="Export data model as DBML and SQL"
+                        ToolTipService.ToolTip="Write the item→material and item→item data model as DBML (dbdiagram.io) and SQL."/>
                 <Button Content="Refresh preview" Style="{StaticResource PrimaryButtonStyle}"
                         Click="RefreshPreview_Click" AutomationProperties.Name="Refresh derivation preview"/>
             </StackPanel>

@@ -14,6 +14,14 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   derivation rules. The C++
   engine stays the single source of truth for all numbers. Inert without an Anthropic API key;
   the key is entered in-app and stored encrypted (Windows DPAPI, per-user).
+- **Data-model export (DBML / SQL)** — a generator (`SchemaExport`) emits the estimation
+  item-relationship model for drawing in [dbdiagram.io](https://dbdiagram.io): **item → material**
+  composition (concrete → cement + fine + coarse aggregate via mix recipes; masonry → bricks + mortar;
+  RCC → steel) and **item → item** derivation (brick wall → plaster → paint; flooring → skirting).
+  Reference content (items, materials, mix ratios, standard link rules) is pulled from the live
+  registries so the model tracks the code. Exportable from **Item links → Export data model**; a
+  committed snapshot lives in [`docs/schema/aqc-core-derivation.dbml`](docs/schema/aqc-core-derivation.dbml)
+  (and `.sql`).
 - **Item links — data-driven linked-item derivation** — derive one trade's quantity from another
   (e.g. plaster = 2 × masonry face area, painting = plaster area, skirting = flooring perimeter).
   Editable rules with a standard India-practice library, a chained derivation preview, and
