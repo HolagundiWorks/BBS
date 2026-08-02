@@ -1,6 +1,6 @@
 # AI Integration Plan — AQC‑Core
 
-**Status:** Phases 0–4 implemented on this branch. Phases 3–4's takeoff and linked‑item tools are delivered **additively at the tool layer** (not by rewiring their UIs) — see the notes.
+**Status:** Phases 0–5 implemented. Phases 3–5's takeoff, linked‑item and level tools are delivered **additively at the tool layer** (not by rewiring their UIs) — see the notes.
 **Scope:** Where and how to add an AI assistant/copilot to AQC‑Core, and the seams it plugs into.
 **Branch:** `claude/ai-entry-points-kgcmip`
 
@@ -241,7 +241,7 @@ every page.
 - `run_calc` is restricted to the eight RCC kinds the engine's generate path handles (`columns`, `beams`, `pedestals`, `lintels`, `slabs`, `footings`, `walls`, `stairs`); it clones rows before `ExpandForGenerate` so preview never mutates the project. Civil BOQ uses different calculators — deferred.
 - The assistant is **inert without `ANTHROPIC_API_KEY`** (`AssistantService.TryCreate` returns null); the command bar then shows a one‑line hint instead of calling out.
 - **In‑app key entry (added):** on first use with no key, the command bar prompts for the Anthropic API key in a dialog and stores it via `AssistantSettings` under `%LocalAppData%\AQCCore\` (same folder as rate books). `TryCreate` reads the stored key first, then falls back to the `ANTHROPIC_API_KEY` env var. A rejected key clears itself and re‑prompts. The key is **encrypted with Windows DPAPI** (per‑user, `System.Security.Cryptography.ProtectedData`); a plaintext key from an earlier build is migrated to the encrypted blob on read.
-- **Not yet built here:** streaming the reply token‑by‑token (would improve UX but isn't required for read‑only Q&A).
+- **Not yet implemented:** streaming the reply token‑by‑token (would improve UX but isn't required for read‑only Q&A).
 
 **Phase 2 notes as built:**
 - Writes are gated by a **hard modal confirmation** (`IAssistantConfirm`, implemented on `MainWindow` with a `ContentDialog` mirroring `About_Click`) — the dialog, not the chat, is the confirmation. The tool loop went async (`ExecuteAsync` + an async UI marshal) so a handler can await the dialog.
@@ -253,7 +253,7 @@ every page.
 - **3a (done):** `create_correspondence` reuses the Phase 2 confirmation gate. The assistant writes the body itself (its own generation) and passes it in; the tool inserts an `OfficeDocument` **draft** (`Finalized = false`, no number) under the current persona into `ProjectStore.Office.Documents`, shows the would‑be number via `PreviewNumber` in the dialog, then navigates to the Correspondence page. Numbering stays a deliberate user action (finalize) — the assistant never finalizes.
 - **3b (done) — model‑chosen opening→wall, additively.** Rather than rewire the synchronous takeoff UI commit path (the risky part), the value lands at the tool layer: `list_takeoff` exposes measured walls + openings + BOQ wall marks, and `commit_opening(opening_id, kind?, wall_mark?)` lets the **model** choose the wall and runs the deterministic `OpeningScheduleLinker.Commit` (confirmed, then navigates). If the model omits the wall, `SuggestWallMark` is the fallback — so the heuristic isn't removed, it's the default the AI can override with reasoning.
 - **3c (done) — vision drawing read, additively.** `read_drawing(question?)` reads `Takeoff.PdfPath` and sends the **PDF straight to Claude** (native base64 PDF input — no PDF‑to‑image rendering, no `Windows.Data.Pdf`), returning an analysis of rooms/walls/openings/dimensions. This is advisory: the AI gets eyes on the drawing and can then act through the confirmed write tools. Capped at 20 MB.
-- **Deliberately still deferred:** pixel‑level auto‑pre‑fill that detects geometry from the drawing and injects scaled `TakeoffItem`s into the canvas. That needs the manual scale calibration (`MmPerPx`) and reliable pixel→mm mapping, and is genuinely hard to get right without a **live compile/run loop** — which this environment (Windows‑only WinUI, not buildable here) can't provide.
+- **Deliberately still deferred:** pixel‑level auto‑pre‑fill that detects geometry from the drawing and injects scaled `TakeoffItem`s into the canvas. That needs the manual scale calibration (`MmPerPx`), reliable pixel→mm mapping, and iterative visual tuning against real drawings. `read_drawing` (advisory vision) is the interim answer.
 
 **Phase 4 notes as built:**
 - **Linked‑item derivation over the tool layer.** The data‑driven derivation model (`LinkRuleBook` → `DerivationEngine`, masonry→plaster→paint, flooring→skirting) is now assistant‑drivable, additively, without touching the `Item links` UI. `list_link_rules` (read) returns the rules plus the live derived totals from `DerivationEngine.Preview`/`Totals`; `add_link_rule` (confirmed) authors a new derivation edge (source/target trade keys, basis, factor, per‑item) validated against `LinkTradeRegistry`/`LinkBasisInfo`; `apply_links` (confirmed) runs `DerivationEngine.Apply` to materialise the derived quantities into the take‑off sheets so they flow into the BOQ and estimate.

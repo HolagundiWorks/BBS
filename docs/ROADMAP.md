@@ -78,14 +78,11 @@ stored encrypted with Windows DPAPI, or read from `ANTHROPIC_API_KEY`).
 
 ## Planned next 🔭
 
-The remaining items are **build-gated** — they touch code that can only be
-verified with a Windows build (the assistant's core loop / command-bar UI, and
-the coupled civil-BOQ sheets), so they're best done when that verification is
-available. Everything that can be reasoned about statically is now done.
+Ordered roughly by value-to-effort.
 
 1. **Streaming AI replies.** Render the assistant's answer token-by-token
    (`Messages.CreateStreaming`) for responsiveness on long answers. Cross-cutting:
-   rewrites the `AskAsync` tool loop and the command-bar UI to update incrementally.
+   touches the `AskAsync` tool loop and the command-bar UI to update incrementally.
 2. **Civil-BOQ writes via the assistant.** Extend `add_element_row` (and add
    edit/delete) beyond the eight RCC kinds to masonry, flooring, plaster, etc.,
    respecting wall-build / finish-derivation coupling (the reason it was deferred
@@ -95,9 +92,8 @@ available. Everything that can be reasoned about statically is now done.
 
 - **Pixel-level takeoff auto-pre-fill.** Detect geometry from the drawing and
   inject scaled `TakeoffItem`s onto the canvas. Needs reliable pixel→mm mapping
-  off the manual scale calibration (`MmPerPx`) and a **live compile/run loop** to
-  tune — impractical in the current Windows-only, non-buildable dev sandbox.
-  `read_drawing` (advisory vision) is the interim answer.
+  off the manual scale calibration (`MmPerPx`) and iterative visual tuning against
+  real drawings. `read_drawing` (advisory vision) is the interim answer.
 
 ---
 
@@ -109,6 +105,5 @@ available. Everything that can be reasoned about statically is now done.
 - **Additive-at-the-tool-layer preferred.** Recent AI phases add capability by
   wrapping existing services rather than rewiring synchronous UI paths — lower
   risk, and it keeps the hand-entry flows intact.
-- **Build environment.** The app is C# WinUI 3 + a C++ engine, buildable on
-  Windows only; changes made outside a Windows toolchain ship unbuilt and need a
-  Windows build to verify.
+- **Build environment.** The app is C# WinUI 3 + a C++ engine and builds on
+  Windows only (see the README for the build steps).
