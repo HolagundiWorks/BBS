@@ -20,7 +20,9 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   BOQ and estimate (idempotent, undoable via Clear applied). The preview and Apply dialog now also
   **price the derived quantities** against the active rate book (rate/amount per line, a total cost,
   and any unpriced codes), using the same canonical rate codes as the estimate so applied link rows
-  price consistently. The AI `list_link_rules` tool reports the derived cost too.
+  price consistently. A rule can **pin a specific rate code** for its derived lines (otherwise the
+  target trade's canonical code is used). The AI `list_link_rules` tool reports the derived cost too,
+  and `add_link_rule` accepts the optional rate code.
 
 ### Changed
 - Project file (`.bbsproj`) format bumped to **v17** — adds the linked-item derivation rules

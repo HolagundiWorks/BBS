@@ -24,6 +24,9 @@ public sealed class DerivedItem
     /// <summary>True when this line's source was itself produced by an upstream rule (a chained link).</summary>
     public bool Chained { get; set; }
 
+    /// <summary>Rate-code override carried from the rule (empty = use the canonical trade code).</summary>
+    public string RateCodeOverride { get; set; } = "";
+
     // ── Pricing (filled by DerivationEngine.Price; zero until then) ──
     /// <summary>Rate code this derived quantity prices on (see EstimateCalculator.CodeForElement).</summary>
     public string RateCode { get; set; } = "";
@@ -160,7 +163,7 @@ public static class DerivationEngine
         var missing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (version is null)
         {
-            foreach (var it in items) { it.RateCode = EstimateCalculator.CodeForElement(it.TargetTradeKey, it.TargetUnit); it.Rate = 0; it.Amount = 0; it.RateMissing = true; }
+            foreach (var it in items) { it.RateCode = CodeFor(it); it.Rate = 0; it.Amount = 0; it.RateMissing = true; }
             return (0, Array.Empty<string>());
         }
 
@@ -168,7 +171,7 @@ public static class DerivationEngine
         double total = 0;
         foreach (var it in items)
         {
-            it.RateCode = EstimateCalculator.CodeForElement(it.TargetTradeKey, it.TargetUnit);
+            it.RateCode = CodeFor(it);
             if (index.TryGetValue(it.RateCode, out var ri))
             {
                 it.Rate = ri.Rate;
@@ -222,7 +225,7 @@ public static class DerivationEngine
                 ["level"] = it.Level,
                 ["link_applied"] = "1",
                 ["link_trade"] = it.TargetTradeKey,
-                ["item_code"] = EstimateCalculator.CodeForElement(it.TargetTradeKey, it.TargetUnit),
+                ["item_code"] = CodeFor(it),
                 ["derived_by"] = it.RuleId,
                 ["source"] = "auto_link",
                 ["source_mark"] = it.SourceMark,
@@ -276,8 +279,16 @@ public static class DerivationEngine
         TargetUnit = string.IsNullOrWhiteSpace(rule.TargetUnit)
             ? LinkTradeRegistry.Unit(rule.TargetTrade)
             : rule.TargetUnit,
-        Chained = chained
+        Chained = chained,
+        RateCodeOverride = rule.RateCodeOverride?.Trim() ?? ""
     };
+
+    /// <summary>The rate code a derived line prices on: the rule's override when set, else the
+    /// target trade's canonical code (shared with the estimate via EstimateCalculator).</summary>
+    private static string CodeFor(DerivedItem it) =>
+        string.IsNullOrWhiteSpace(it.RateCodeOverride)
+            ? EstimateCalculator.CodeForElement(it.TargetTradeKey, it.TargetUnit)
+            : it.RateCodeOverride.Trim();
 
     /// <summary>Store a produced quantity under the target trade so downstream rules can read it.</summary>
     private static NodeQty TargetNode(LinkRule rule, string mark, string level, double tq)

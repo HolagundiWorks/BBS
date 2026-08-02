@@ -69,8 +69,17 @@
                     <TextBox x:Name="UnitBox" Grid.Column="4" Header="Unit"/>
                 </Grid>
 
-                <TextBox x:Name="NotesBox" Header="Notes"
-                         PlaceholderText="Optional — assumptions, IS-code reference, when to enable"/>
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="180"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="NotesBox" Header="Notes"
+                             PlaceholderText="Optional — assumptions, IS-code reference, when to enable"/>
+                    <TextBox x:Name="RateCodeBox" Grid.Column="1" Header="Rate code (optional)"
+                             PlaceholderText="e.g. PL-STD"
+                             ToolTipService.ToolTip="Pin the rate code the derived lines price on. Leave blank to use the target trade's default code."/>
+                </Grid>
 
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpacingS}">
                     <Button Content="Apply changes" Style="{StaticResource SecondaryButtonStyle}"

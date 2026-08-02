@@ -77,6 +77,9 @@ public sealed class LinkRule
     public string TargetUnit { get; set; } = "m²";
     /// <summary>True: one linked line per source item (keeps mark/level). False: one aggregate line.</summary>
     public bool PerItem { get; set; } = true;
+    /// <summary>Optional rate code the derived lines price on. Empty = the target trade's canonical
+    /// code (<see cref="EstimateCalculator.CodeForElement"/>). Set to pin a specific rate item.</summary>
+    public string RateCodeOverride { get; set; } = "";
     public string Notes { get; set; } = "";
 
     public LinkRule Clone() => new()
@@ -90,6 +93,7 @@ public sealed class LinkRule
         Factor = Factor,
         TargetUnit = TargetUnit,
         PerItem = PerItem,
+        RateCodeOverride = RateCodeOverride,
         Notes = Notes
     };
 
@@ -104,6 +108,7 @@ public sealed class LinkRule
         ["factor"] = Factor,
         ["target_unit"] = TargetUnit,
         ["per_item"] = PerItem ? 1 : 0,
+        ["rate_code"] = RateCodeOverride,
         ["notes"] = Notes
     };
 
@@ -126,6 +131,7 @@ public sealed class LinkRule
             Factor = Num("factor", 1.0),
             TargetUnit = Str("target_unit", "m²"),
             PerItem = Num("per_item", 1) != 0,
+            RateCodeOverride = Str("rate_code"),
             Notes = Str("notes")
         };
     }

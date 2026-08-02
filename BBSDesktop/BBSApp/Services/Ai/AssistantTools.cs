@@ -254,6 +254,7 @@ public sealed class AssistantTools
                     ["factor"] = Schema(new { type = "number", description = "Multiplier applied to the basis measure (default 1)." }),
                     ["name"] = Schema(new { type = "string", description = "Optional rule name; a source→target label is used if omitted." }),
                     ["target_unit"] = Schema(new { type = "string", description = "Optional unit for the derived quantity; defaults to the target trade's unit." }),
+                    ["rate_code"] = Schema(new { type = "string", description = "Optional rate code the derived lines price on; defaults to the target trade's canonical code." }),
                     ["per_item"] = Schema(new { type = "boolean", description = "True (default): one derived line per source item, keeping mark/level. False: a single aggregate line." })
                 },
                 Required = new List<string> { "source", "target", "basis" }
@@ -674,6 +675,7 @@ public sealed class AssistantTools
                 ["basis"] = LinkBasisInfo.Label(r.Basis),
                 ["factor"] = r.Factor,
                 ["target_unit"] = r.TargetUnit,
+                ["rate_code"] = string.IsNullOrWhiteSpace(r.RateCodeOverride) ? null : r.RateCodeOverride,
                 ["per_item"] = r.PerItem
             });
 
@@ -741,6 +743,8 @@ public sealed class AssistantTools
         string name = GetString(input, "name").Trim();
         if (string.IsNullOrWhiteSpace(name)) name = $"{srcDef.Display} → {tgtDef.Display}";
 
+        string rateCode = GetString(input, "rate_code").Trim();
+
         var rule = new LinkRule
         {
             Name = name,
@@ -749,13 +753,15 @@ public sealed class AssistantTools
             Basis = basis,
             Factor = factor,
             TargetUnit = unit,
+            RateCodeOverride = rateCode,
             PerItem = perItem,
             Enabled = true
         };
 
         string equation = $"{tgtDef.Display} = {factor.ToString("0.###", CultureInfo.InvariantCulture)} × "
                         + $"{srcDef.Display} {LinkBasisInfo.Label(basis).ToLowerInvariant()} ({unit})";
-        string details = $"{name}\n{equation}\n{(perItem ? "one line per source item" : "single aggregate line")}";
+        string codeLine = string.IsNullOrWhiteSpace(rateCode) ? "" : $"\nprices on rate code {rateCode}";
+        string details = $"{name}\n{equation}\n{(perItem ? "one line per source item" : "single aggregate line")}{codeLine}";
         if (!await _confirm.ConfirmAsync("Add link rule?", details))
             return "Cancelled — no link rule added.";
 

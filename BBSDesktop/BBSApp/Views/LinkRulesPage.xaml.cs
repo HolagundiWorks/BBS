@@ -103,6 +103,7 @@ public sealed partial class LinkRulesPage : Page
         {
             NameBox.Text = "";
             NotesBox.Text = "";
+            RateCodeBox.Text = "";
             FactorBox.Value = 1;
             UnitBox.Text = "";
             EnabledToggle.IsOn = true;
@@ -113,6 +114,7 @@ public sealed partial class LinkRulesPage : Page
         }
         NameBox.Text = r.Name;
         NotesBox.Text = r.Notes;
+        RateCodeBox.Text = r.RateCodeOverride;
         FactorBox.Value = r.Factor;
         UnitBox.Text = r.TargetUnit;
         EnabledToggle.IsOn = r.Enabled;
@@ -131,6 +133,7 @@ public sealed partial class LinkRulesPage : Page
 
         r.Name = NameBox.Text?.Trim() ?? "";
         r.Notes = NotesBox.Text?.Trim() ?? "";
+        r.RateCodeOverride = RateCodeBox.Text?.Trim() ?? "";
         r.SourceTrade = TagOf(SourceCombo) ?? r.SourceTrade;
         r.TargetTrade = TagOf(TargetCombo) ?? r.TargetTrade;
         r.Basis = LinkBasisInfo.Parse(TagOf(BasisCombo));
