@@ -104,6 +104,7 @@ public sealed partial class LinkRulesPage : Page
             NameBox.Text = "";
             NotesBox.Text = "";
             RateCodeBox.Text = "";
+            RateBox.Value = double.NaN;
             FactorBox.Value = 1;
             UnitBox.Text = "";
             EnabledToggle.IsOn = true;
@@ -115,6 +116,7 @@ public sealed partial class LinkRulesPage : Page
         NameBox.Text = r.Name;
         NotesBox.Text = r.Notes;
         RateCodeBox.Text = r.RateCodeOverride;
+        RateBox.Value = r.RateOverride > 0 ? r.RateOverride : double.NaN;
         FactorBox.Value = r.Factor;
         UnitBox.Text = r.TargetUnit;
         EnabledToggle.IsOn = r.Enabled;
@@ -134,6 +136,7 @@ public sealed partial class LinkRulesPage : Page
         r.Name = NameBox.Text?.Trim() ?? "";
         r.Notes = NotesBox.Text?.Trim() ?? "";
         r.RateCodeOverride = RateCodeBox.Text?.Trim() ?? "";
+        r.RateOverride = double.IsNaN(RateBox.Value) || RateBox.Value < 0 ? 0 : RateBox.Value;
         r.SourceTrade = TagOf(SourceCombo) ?? r.SourceTrade;
         r.TargetTrade = TagOf(TargetCombo) ?? r.TargetTrade;
         r.Basis = LinkBasisInfo.Parse(TagOf(BasisCombo));
@@ -359,7 +362,9 @@ public sealed partial class LinkRulesPage : Page
             string summary = string.Join("   ·   ",
                 totals.Select(t => $"{t.Trade} {t.Qty.ToString("0.##", CultureInfo.InvariantCulture)} {t.Unit} ({t.Lines})"));
             string cost = version is null
-                ? "  ·  no rate book to price against"
+                ? (costTotal > 0
+                    ? $"  ·  Derived cost ≈ ₹{costTotal.ToString("N2", CultureInfo.InvariantCulture)} (manual rates only)"
+                    : "  ·  no rate book to price against")
                 : $"  ·  Derived cost ≈ ₹{costTotal.ToString("N2", CultureInfo.InvariantCulture)} ({version.Name})"
                   + (missing.Count > 0 ? $"  ·  {missing.Count} code(s) unpriced: {string.Join(", ", missing)}" : "");
             TotalsText.Text = "Derived totals:  " + summary + cost + "     ⭑ = chained link.";

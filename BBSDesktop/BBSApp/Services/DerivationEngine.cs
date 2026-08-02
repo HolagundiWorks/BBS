@@ -26,6 +26,8 @@ public sealed class DerivedItem
 
     /// <summary>Rate-code override carried from the rule (empty = use the canonical trade code).</summary>
     public string RateCodeOverride { get; set; } = "";
+    /// <summary>Manual unit rate carried from the rule (0 = price via the rate book).</summary>
+    public double RateOverride { get; set; }
 
     // ── Pricing (filled by DerivationEngine.Price; zero until then) ──
     /// <summary>Rate code this derived quantity prices on (see EstimateCalculator.CodeForElement).</summary>
@@ -161,18 +163,18 @@ public static class DerivationEngine
         IReadOnlyList<DerivedItem> items, RateBookVersion? version)
     {
         var missing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (version is null)
-        {
-            foreach (var it in items) { it.RateCode = CodeFor(it); it.Rate = 0; it.Amount = 0; it.RateMissing = true; }
-            return (0, Array.Empty<string>());
-        }
-
-        var index = RateBookStore.Current.IndexByCode(version);
+        var index = version is null ? null : RateBookStore.Current.IndexByCode(version);
         double total = 0;
         foreach (var it in items)
         {
             it.RateCode = CodeFor(it);
-            if (index.TryGetValue(it.RateCode, out var ri))
+            if (it.RateOverride > 0)
+            {
+                // Manual rate wins over any rate-book lookup — prices even with no rate book.
+                it.Rate = it.RateOverride;
+                it.RateMissing = false;
+            }
+            else if (index is not null && index.TryGetValue(it.RateCode, out var ri))
             {
                 it.Rate = ri.Rate;
                 it.RateMissing = false;
@@ -181,7 +183,7 @@ public static class DerivationEngine
             {
                 it.Rate = 0;
                 it.RateMissing = true;
-                missing.Add(it.RateCode);
+                if (index is not null) missing.Add(it.RateCode);
             }
             it.Amount = Math.Round(it.TargetQty * it.Rate, 2);
             total += it.Amount;
@@ -226,6 +228,7 @@ public static class DerivationEngine
                 ["link_applied"] = "1",
                 ["link_trade"] = it.TargetTradeKey,
                 ["item_code"] = CodeFor(it),
+                ["rate"] = it.RateOverride > 0 ? Inv(it.RateOverride) : "",
                 ["derived_by"] = it.RuleId,
                 ["source"] = "auto_link",
                 ["source_mark"] = it.SourceMark,
@@ -280,7 +283,8 @@ public static class DerivationEngine
             ? LinkTradeRegistry.Unit(rule.TargetTrade)
             : rule.TargetUnit,
         Chained = chained,
-        RateCodeOverride = rule.RateCodeOverride?.Trim() ?? ""
+        RateCodeOverride = rule.RateCodeOverride?.Trim() ?? "",
+        RateOverride = rule.RateOverride > 0 ? rule.RateOverride : 0
     };
 
     /// <summary>The rate code a derived line prices on: the rule's override when set, else the

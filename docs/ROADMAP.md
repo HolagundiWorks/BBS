@@ -37,7 +37,8 @@ and estimate (idempotent; undoable via *Clear applied*). The preview and Apply
 dialog **price** the derived quantities against the active rate book — rate and
 amount per line, a total cost, and any unpriced codes — using the same canonical
 rate codes as the estimate so applied rows price consistently, and a rule can
-**pin a specific rate code** for its derived lines. `.bbsproj` bumped to **v17**
+**pin a specific rate code** or a **manual unit rate** for its derived lines (a
+manual rate prices even with no rate-book entry). `.bbsproj` bumped to **v17**
 (`link_rules`).
 
 ### AI assistant (opt-in)
@@ -65,10 +66,10 @@ stored encrypted with Windows DPAPI, or read from `ANTHROPIC_API_KEY`).
 
 ## Planned next 🔭
 
-Ordered roughly by value-to-effort. None of these are started. The first two are
-**build-gated** — they touch code that can only be verified with a Windows build
-(the assistant's core loop / command-bar UI, and the coupled civil-BOQ sheets),
-so they're best done when that verification is available.
+The remaining items are **build-gated** — they touch code that can only be
+verified with a Windows build (the assistant's core loop / command-bar UI, and
+the coupled civil-BOQ sheets), so they're best done when that verification is
+available. Everything that can be reasoned about statically is now done.
 
 1. **Streaming AI replies.** Render the assistant's answer token-by-token
    (`Messages.CreateStreaming`) for responsiveness on long answers. Cross-cutting:
@@ -77,9 +78,6 @@ so they're best done when that verification is available.
    edit/delete) beyond the eight RCC kinds to masonry, flooring, plaster, etc.,
    respecting wall-build / finish-derivation coupling (the reason it was deferred
    in Phase 2).
-3. **Manual per-line rate for linked items.** Rules can already pin a rate *code*;
-   a further step could let a rule carry a manual numeric rate, which needs the
-   estimate pipeline to honour a per-row rate (today it always looks up by code).
 
 ## Deferred 💤
 

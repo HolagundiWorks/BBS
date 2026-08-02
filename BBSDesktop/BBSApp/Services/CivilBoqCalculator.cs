@@ -32,6 +32,8 @@ public sealed class CivilLine
     public double HeightM { get; set; }
     /// <summary>True for rows materialised from a link rule (DerivationEngine.Apply); excluded from re-derivation.</summary>
     public bool Linked { get; set; }
+    /// <summary>Manual unit rate (₹) for this line; when &gt; 0 the estimate uses it instead of a rate-book lookup.</summary>
+    public double RateOverride { get; set; }
 }
 
 /// <summary>
@@ -229,7 +231,8 @@ public static class CivilBoqCalculator
             Description = S(r, "notes", "Linked item"),
             Unit = unit,
             Qty = Round3(qty),
-            Linked = true
+            Linked = true,
+            RateOverride = F(r, "rate")
         };
         if (unit.Contains("m³", StringComparison.OrdinalIgnoreCase) || unit.Contains("m3", StringComparison.OrdinalIgnoreCase))
             line.VolumeM3 = Round3(qty);

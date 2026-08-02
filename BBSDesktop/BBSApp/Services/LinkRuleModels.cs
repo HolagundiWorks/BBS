@@ -80,6 +80,9 @@ public sealed class LinkRule
     /// <summary>Optional rate code the derived lines price on. Empty = the target trade's canonical
     /// code (<see cref="EstimateCalculator.CodeForElement"/>). Set to pin a specific rate item.</summary>
     public string RateCodeOverride { get; set; } = "";
+    /// <summary>Optional manual unit rate (₹) for the derived lines. When &gt; 0 it wins over any
+    /// rate-code lookup, so the derived quantity prices even with no rate-book entry.</summary>
+    public double RateOverride { get; set; }
     public string Notes { get; set; } = "";
 
     public LinkRule Clone() => new()
@@ -94,6 +97,7 @@ public sealed class LinkRule
         TargetUnit = TargetUnit,
         PerItem = PerItem,
         RateCodeOverride = RateCodeOverride,
+        RateOverride = RateOverride,
         Notes = Notes
     };
 
@@ -109,6 +113,7 @@ public sealed class LinkRule
         ["target_unit"] = TargetUnit,
         ["per_item"] = PerItem ? 1 : 0,
         ["rate_code"] = RateCodeOverride,
+        ["rate_override"] = RateOverride,
         ["notes"] = Notes
     };
 
@@ -132,6 +137,7 @@ public sealed class LinkRule
             TargetUnit = Str("target_unit", "m²"),
             PerItem = Num("per_item", 1) != 0,
             RateCodeOverride = Str("rate_code"),
+            RateOverride = Num("rate_override", 0),
             Notes = Str("notes")
         };
     }

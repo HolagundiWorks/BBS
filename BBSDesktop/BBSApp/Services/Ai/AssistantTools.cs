@@ -257,6 +257,7 @@ public sealed class AssistantTools
                     ["name"] = Schema(new { type = "string", description = "Optional rule name; a source→target label is used if omitted." }),
                     ["target_unit"] = Schema(new { type = "string", description = "Optional unit for the derived quantity; defaults to the target trade's unit." }),
                     ["rate_code"] = Schema(new { type = "string", description = "Optional rate code the derived lines price on; defaults to the target trade's canonical code." }),
+                    ["rate"] = Schema(new { type = "number", description = "Optional manual unit rate (₹) for the derived lines; when set it overrides the rate-book lookup." }),
                     ["per_item"] = Schema(new { type = "boolean", description = "True (default): one derived line per source item, keeping mark/level. False: a single aggregate line." })
                 },
                 Required = new List<string> { "source", "target", "basis" }
@@ -705,6 +706,7 @@ public sealed class AssistantTools
                 ["factor"] = r.Factor,
                 ["target_unit"] = r.TargetUnit,
                 ["rate_code"] = string.IsNullOrWhiteSpace(r.RateCodeOverride) ? null : r.RateCodeOverride,
+                ["rate_override"] = r.RateOverride > 0 ? (JsonNode)r.RateOverride : null,
                 ["per_item"] = r.PerItem
             });
 
@@ -773,6 +775,8 @@ public sealed class AssistantTools
         if (string.IsNullOrWhiteSpace(name)) name = $"{srcDef.Display} → {tgtDef.Display}";
 
         string rateCode = GetString(input, "rate_code").Trim();
+        double rateOverride = GetNumber(input, "rate", 0);
+        if (rateOverride < 0) rateOverride = 0;
 
         var rule = new LinkRule
         {
@@ -783,13 +787,16 @@ public sealed class AssistantTools
             Factor = factor,
             TargetUnit = unit,
             RateCodeOverride = rateCode,
+            RateOverride = rateOverride,
             PerItem = perItem,
             Enabled = true
         };
 
         string equation = $"{tgtDef.Display} = {factor.ToString("0.###", CultureInfo.InvariantCulture)} × "
                         + $"{srcDef.Display} {LinkBasisInfo.Label(basis).ToLowerInvariant()} ({unit})";
-        string codeLine = string.IsNullOrWhiteSpace(rateCode) ? "" : $"\nprices on rate code {rateCode}";
+        string codeLine = rateOverride > 0
+            ? $"\nprices at manual rate ₹{rateOverride.ToString("0.##", CultureInfo.InvariantCulture)}"
+            : string.IsNullOrWhiteSpace(rateCode) ? "" : $"\nprices on rate code {rateCode}";
         string details = $"{name}\n{equation}\n{(perItem ? "one line per source item" : "single aggregate line")}{codeLine}";
         if (!await _confirm.ConfirmAsync("Add link rule?", details))
             return "Cancelled — no link rule added.";

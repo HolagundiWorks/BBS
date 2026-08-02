@@ -72,13 +72,18 @@
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="180"/>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="120"/>
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="NotesBox" Header="Notes"
                              PlaceholderText="Optional — assumptions, IS-code reference, when to enable"/>
                     <TextBox x:Name="RateCodeBox" Grid.Column="1" Header="Rate code (optional)"
                              PlaceholderText="e.g. PL-STD"
                              ToolTipService.ToolTip="Pin the rate code the derived lines price on. Leave blank to use the target trade's default code."/>
+                    <NumberBox x:Name="RateBox" Grid.Column="2" Header="Rate ₹ (optional)"
+                               SpinButtonPlacementMode="Compact" Minimum="0" SmallChange="1"
+                               AutomationProperties.Name="Manual unit rate"
+                               ToolTipService.ToolTip="Manual unit rate for the derived lines. When set, it overrides the rate-book lookup."/>
                 </Grid>
 
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpacingS}">

@@ -166,7 +166,18 @@ public static class EstimateCalculator
             string code = string.IsNullOrWhiteSpace(c.ItemCode)
                 ? InferCivilCode(c)
                 : c.ItemCode.Trim();
-            var (rate, notes) = Lookup(index, code, missing);
+            double rate;
+            string notes;
+            if (c.RateOverride > 0)
+            {
+                // Manual rate carried on the line (e.g. a linked item with a pinned rate).
+                rate = c.RateOverride;
+                notes = "manual rate";
+            }
+            else
+            {
+                (rate, notes) = Lookup(index, code, missing);
+            }
             result.Civil.Add(new EstimateLine
             {
                 Code = code,
