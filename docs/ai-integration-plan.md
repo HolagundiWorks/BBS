@@ -1,6 +1,6 @@
 # AI Integration Plan — AQC‑Core
 
-**Status:** Phases 0–6 implemented. Phases 3–6's takeoff, linked‑item, level and civil‑BOQ tools are delivered **additively at the tool layer** (not by rewiring their UIs) — see the notes.
+**Status:** Phases 0–7 implemented. Phases 3–7's takeoff, linked‑item, level, civil‑BOQ and row‑edit tools are delivered **additively at the tool layer** (not by rewiring their UIs) — see the notes.
 **Scope:** Where and how to add an AI assistant/copilot to AQC‑Core, and the seams it plugs into.
 **Branch:** `claude/ai-entry-points-kgcmip`
 
@@ -236,6 +236,7 @@ every page.
 | **4** | Linked‑item derivation: `list_link_rules` (read) + `add_link_rule` / `apply_links` (confirmed) let the assistant read, author and apply the data‑driven derivation model (masonry→plaster→paint, flooring→skirting) so derived quantities reach the BOQ/estimate. | medium (tool‑layer, additive) | ✅ done |
 | **5** | Level awareness: `list_levels` (read) + `add_level` (confirmed) let the assistant read the storeys (heights, column clear height) and add one; member/take‑off rows target a storey via their `level` field. | low (tool‑layer, additive) | ✅ done |
 | **6** | Civil‑BOQ writes: `add_civil_row` (confirmed) adds a measurement row to the civil sheets (masonry, plaster, flooring, painting, PCC, …), mirroring the RCC `add_element_row` pattern. | medium (writes state) | ✅ done |
+| **7** | Row edit / delete: `edit_row` + `delete_row` (confirmed) change or remove any RCC or civil row, addressed by kind + mark. | medium (writes state) | ✅ done |
 
 **Phase 1 notes as built:**
 - Uses the official `Anthropic` .NET SDK (`claude-opus-5`, adaptive thinking) via a **manual tool loop** in `AssistantService` — the SDK's `BetaToolRunner` handler-registration API isn't in the reference docs, so the loop is hand-written to stay on documented ground.
@@ -266,6 +267,9 @@ every page.
 
 **Phase 6 notes as built:**
 - `add_civil_row(trade, fields)` appends a measurement row to the civil sheet for `trade` via `ProjectStore.SheetForTrade` (masonry, plaster, pcc, earthwork, ssm, flooring, painting, waterproofing, dpc, coping, screed, vdf, skirting, parapet, plinth_protection). Rather than seed from the last row (civil geometry is per‑row), it starts clean and lets each calculator's own field defaults (`S(r, key, default)`) fill anything the caller omits; only `mark` (auto — a per‑kind prefix + next integer) and `level` (last row's, else Lvl0) are stamped. Confirmed via the Phase 2 gate, then navigates to the trade's page. **Deliberately excluded:** masonry openings and door/window schedules — the openings/finishes coupling and schedule fields have their own flows (`commit_opening`, the takeoff), so this covers plain measurement rows only.
+
+**Phase 7 notes as built:**
+- `edit_row(kind, mark, fields)` and `delete_row(kind, mark)` operate on any RCC or civil sheet through a shared `ResolveSheet` (RCC `CollectionFor` first, else `SheetForTrade`). A row is addressed by its **mark**; `FindByMark` refuses the operation when no row — or more than one — carries that mark (marks are unique within a sheet because the add tools auto‑number them). Edit shows an old→new diff of only the changed keys and no‑ops when nothing differs; delete shows a level + dimensions summary. Both use the Phase 2 confirmation gate, are in‑memory only, and navigate to the kind's page.
 
 Phase 0 is worth doing on its own — exposing `NavigateTo` as a command bus is a
 clean improvement regardless of whether AI ships.

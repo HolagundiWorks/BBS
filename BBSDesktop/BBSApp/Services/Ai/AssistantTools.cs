@@ -65,6 +65,9 @@ public sealed class AssistantTools
 
     private static readonly string[] CivilKindKeys = CivilKinds.Keys.OrderBy(k => k).ToArray();
 
+    // Kinds whose rows can be edited/deleted by mark — the RCC members plus the civil sheets.
+    private static readonly string[] EditableKinds = EngineKinds.Concat(CivilKindKeys).OrderBy(k => k).ToArray();
+
     private const long MaxPdfBytes = 20 * 1024 * 1024;
 
     private readonly IAppCommandBus _bus;
@@ -100,6 +103,8 @@ public sealed class AssistantTools
         "list_levels" => Task.FromResult(ListLevels()),
         "add_level" => AddLevelAsync(input),
         "add_civil_row" => AddCivilRowAsync(input),
+        "edit_row" => EditRowAsync(input),
+        "delete_row" => DeleteRowAsync(input),
         _ => Task.FromResult($"Unknown tool: {name}")
     };
 
@@ -357,6 +362,46 @@ public sealed class AssistantTools
                     })
                 },
                 Required = new List<string> { "trade" }
+            }
+        },
+        new Tool
+        {
+            Name = "edit_row",
+            Description = "Edit an existing row, addressed by its kind and mark. Works for RCC members "
+                        + "(columns, beams, …) and civil sheets (masonry, plaster, flooring, …). Put only "
+                        + "the fields to change in `fields` (dimensions in mm); other fields are left as-is. "
+                        + "Fails if no row — or more than one — has that mark. The user must approve the "
+                        + "change in a dialog before it is applied — do not ask in chat first.",
+            InputSchema = new()
+            {
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["kind"] = Schema(new { type = "string", @enum = EditableKinds, description = "RCC or civil kind." }),
+                    ["mark"] = Schema(new { type = "string", description = "Mark of the row to edit (unique within the sheet)." }),
+                    ["fields"] = Schema(new
+                    {
+                        type = "object",
+                        description = "Field key/value changes (values as strings; dimensions in mm).",
+                        additionalProperties = new { type = "string" }
+                    })
+                },
+                Required = new List<string> { "kind", "mark", "fields" }
+            }
+        },
+        new Tool
+        {
+            Name = "delete_row",
+            Description = "Delete an existing row, addressed by its kind and mark. Works for RCC members "
+                        + "and civil sheets. Fails if no row — or more than one — has that mark. The user "
+                        + "must approve in a dialog before it is removed — do not ask in chat first.",
+            InputSchema = new()
+            {
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["kind"] = Schema(new { type = "string", @enum = EditableKinds, description = "RCC or civil kind." }),
+                    ["mark"] = Schema(new { type = "string", description = "Mark of the row to delete (unique within the sheet)." })
+                },
+                Required = new List<string> { "kind", "mark" }
             }
         }
     };
@@ -1030,6 +1075,94 @@ public sealed class AssistantTools
                 && int.TryParse(m.AsSpan(prefix.Length), out var n))
                 max = Math.Max(max, n);
         return prefix + (max + 1);
+    }
+
+    // ——— Row edit / delete (RCC + civil) ———
+
+    private async Task<string> EditRowAsync(IReadOnlyDictionary<string, JsonElement> input)
+    {
+        string kind = GetString(input, "kind").Trim().ToLowerInvariant();
+        var sheet = ResolveSheet(kind);
+        if (sheet is null)
+            return $"edit_row supports RCC and civil kinds: {string.Join(", ", EditableKinds)}.";
+
+        string mark = GetString(input, "mark").Trim();
+        var (row, err) = FindByMark(sheet, kind, mark);
+        if (row is null) return err;
+
+        if (!input.TryGetValue("fields", out var fe) || fe.ValueKind != JsonValueKind.Object)
+            return "Provide the fields to change in `fields`.";
+
+        var changes = new List<string>();
+        var pending = new List<(string Key, string Value)>();
+        foreach (var p in fe.EnumerateObject())
+        {
+            string nv = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() ?? "" : p.Value.GetRawText();
+            string ov = row.TryGetValue(p.Name, out var e) ? e : "";
+            if (!nv.Equals(ov, StringComparison.Ordinal))
+                changes.Add($"{p.Name}: {(string.IsNullOrEmpty(ov) ? "—" : ov)} → {nv}");
+            pending.Add((p.Name, nv));
+        }
+        if (changes.Count == 0)
+            return $"No change — the {kind} row \"{mark}\" already has those values.";
+
+        if (!await _confirm.ConfirmAsync($"Edit {kind} row {mark}?", string.Join("\n", changes)))
+            return $"Cancelled — {kind} row {mark} unchanged.";
+
+        foreach (var (k, v) in pending) row[k] = v;
+        ProjectStore.Current.Notify();
+        AppNotify.Success($"{kind} row updated", mark);
+        _bus.Navigate(kind);
+        return $"Updated {kind} row {mark}: {string.Join("; ", changes)}.";
+    }
+
+    private async Task<string> DeleteRowAsync(IReadOnlyDictionary<string, JsonElement> input)
+    {
+        string kind = GetString(input, "kind").Trim().ToLowerInvariant();
+        var sheet = ResolveSheet(kind);
+        if (sheet is null)
+            return $"delete_row supports RCC and civil kinds: {string.Join(", ", EditableKinds)}.";
+
+        string mark = GetString(input, "mark").Trim();
+        var (row, err) = FindByMark(sheet, kind, mark);
+        if (row is null) return err;
+
+        if (!await _confirm.ConfirmAsync($"Delete {kind} row {mark}?",
+                RowSummary(row) + "\nThis removes the row from the sheet."))
+            return $"Cancelled — {kind} row {mark} kept.";
+
+        sheet.Remove(row);
+        ProjectStore.Current.Notify();
+        AppNotify.Success($"{kind} row deleted", mark);
+        _bus.Navigate(kind);
+        return $"Deleted {kind} row {mark}. The {kind} sheet now has {sheet.Count} row(s).";
+    }
+
+    /// <summary>Resolve a kind to its row collection — RCC members first, then the civil sheets.</summary>
+    private static ObservableCollection<Dictionary<string, string>>? ResolveSheet(string kind) =>
+        CollectionFor(kind) ?? ProjectStore.Current.SheetForTrade(kind);
+
+    /// <summary>Find the single row with the given mark; returns an error string when none or many.</summary>
+    private static (Dictionary<string, string>? Row, string Error) FindByMark(
+        ObservableCollection<Dictionary<string, string>> sheet, string kind, string mark)
+    {
+        if (string.IsNullOrWhiteSpace(mark))
+            return (null, "Provide the mark of the row (unique within the sheet).");
+        var hits = sheet.Where(r =>
+            r.TryGetValue("mark", out var m) && m.Trim().Equals(mark, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (hits.Count == 0) return (null, $"No {kind} row with mark \"{mark}\".");
+        if (hits.Count > 1) return (null, $"{hits.Count} {kind} rows share mark \"{mark}\" — rename one first so it's unambiguous.");
+        return (hits[0], "");
+    }
+
+    private static string RowSummary(Dictionary<string, string> row)
+    {
+        string lvl = row.TryGetValue("level", out var l) && !string.IsNullOrWhiteSpace(l) ? l : "—";
+        var dims = new[] { "length", "breadth", "width", "height", "depth", "thickness", "span", "span_x", "span_y", "nos", "area_m2", "qty" }
+            .Where(k => row.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v))
+            .Select(k => $"{k}={row[k]}")
+            .ToList();
+        return $"level {lvl} · " + (dims.Count > 0 ? string.Join(", ", dims) : "no dimensions set");
     }
 
     private static OpeningScheduleLinker.ScheduleKind ParseKind(string k, TakeoffItem item) =>

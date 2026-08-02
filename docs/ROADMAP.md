@@ -66,6 +66,7 @@ notes):
 | 4 | `list_link_rules` + `add_link_rule` / `apply_links` — drive the linked-item model | ✅ |
 | 5 | `list_levels` + `add_level` — read storeys and add one (confirmed); rows target a level by id | ✅ |
 | 6 | `add_civil_row` — confirmed civil-BOQ writes (masonry, plaster, flooring, painting, PCC, …) | ✅ |
+| 7 | `edit_row` + `delete_row` — confirmed edit/delete of any RCC or civil row, addressed by mark | ✅ |
 
 Every write is gated by a modal confirmation dialog and stays in-memory until the
 user saves. The assistant is inert without an Anthropic API key (entered in-app,
@@ -80,9 +81,6 @@ Ordered roughly by value-to-effort.
 1. **Streaming AI replies.** Render the assistant's answer token-by-token
    (`Messages.CreateStreaming`) for responsiveness on long answers. Cross-cutting:
    touches the `AskAsync` tool loop and the command-bar UI to update incrementally.
-2. **Row editing / deletion via the assistant.** Adds exist for RCC and civil;
-   a follow-up could let the assistant edit or remove a specific row (RCC or
-   civil), which needs a way to address an existing row unambiguously.
 
 ## Deferred 💤
 
