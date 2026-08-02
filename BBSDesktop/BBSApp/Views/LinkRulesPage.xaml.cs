@@ -221,6 +221,22 @@ public sealed partial class LinkRulesPage : Page
         MainPivot.SelectedIndex = 1;
     }
 
+    private void ExportSchema_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string dir = System.IO.Path.Combine(Branding.AppDataDirectory, "schema");
+            var (dbml, _) = SchemaExport.WriteFiles(dir);
+            Success("ERD exported",
+                $"aqc-core.dbml + .sql written to {System.IO.Path.GetDirectoryName(dbml)}. "
+                + "Open the .dbml in dbdiagram.io (New Diagram → Import) to draw it.");
+        }
+        catch (System.Exception ex)
+        {
+            Warn("Export failed", ex.Message);
+        }
+    }
+
     private async void ApplyToSheets_Click(object sender, RoutedEventArgs e)
     {
         var items = DerivationEngine.Preview(ProjectStore.Current, Book);

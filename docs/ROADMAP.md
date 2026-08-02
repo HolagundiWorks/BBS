@@ -5,7 +5,7 @@ planned next. Detail lives in the linked documents; this page is the map.
 
 - Released history → [CHANGELOG.md](../CHANGELOG.md)
 - AI assistant design + phased rollout → [ai-integration-plan.md](ai-integration-plan.md)
-- Logical ERD — derivation + material composition (ERD/SQL) → [schema/aqc-core.dbml](schema/aqc-core.dbml)
+- Logical ERD — derivation + material composition, code-generated (ERD/SQL) → [schema/aqc-core.dbml](schema/aqc-core.dbml)
 
 Legend: ✅ shipped · 🚧 on `main`, unreleased · 🔭 planned · 💤 deferred
 
@@ -40,6 +40,14 @@ rate codes as the estimate so applied rows price consistently, and a rule can
 **pin a specific rate code** or a **manual unit rate** for its derived lines (a
 manual rate prices even with no rate-book entry). `.bbsproj` bumped to **v17**
 (`link_rules`).
+
+### ERD export (DBML / SQL)
+A generator (`SchemaExport`) emits the **full logical ERD** as DBML (for
+[dbdiagram.io](https://dbdiagram.io)) and SQL — all tables plus seed rows for the
+reference/library tables (trades, materials, mix recipes, the standard link-rule
+library), pulled from the live registries so the schema tracks the code. Run it
+from **Item links → Export ERD**; the committed snapshot is
+`docs/schema/aqc-core.dbml` (+ `.sql`).
 
 ### AI assistant (opt-in)
 A copilot on the command bar that drives the same code paths a user would. The
