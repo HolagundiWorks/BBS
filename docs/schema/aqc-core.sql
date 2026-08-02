@@ -1,8 +1,10 @@
 -- ============================================================================
 -- AQC-Core — estimation linked-item data model (logical ERD / schema)
 --
--- Relational view of the model the app persists as JSON (.bbsproj, version 17),
--- centred on the link-rule derivation engine (trade -> link_rule -> derived_item).
+-- Relational view of the model the app persists as JSON (.bbsproj, version 17).
+-- Two item relationships: derivation (trade -> link_rule -> derived_item) and
+-- composition (trade / mix_design -> material). A focused, code-generated view of
+-- just these two is in aqc-core-derivation.sql.
 --
 -- Portable ANSI-ish DDL. Import into a Database Schema Designer:
 --   DBeaver / MySQL Workbench (reverse engineer) / SSMS / pgAdmin / dbdiagram.io
@@ -99,6 +101,47 @@ CREATE TABLE derived_item (
     CONSTRAINT fk_derived_source FOREIGN KEY (source_trade) REFERENCES trade (key),
     CONSTRAINT fk_derived_target FOREIGN KEY (target_trade) REFERENCES trade (key),
     CONSTRAINT fk_derived_level  FOREIGN KEY (level_id)     REFERENCES level (id)
+);
+
+-- ---- Materials & composition (item -> material) -----------------------------
+
+CREATE TABLE material (
+    key       VARCHAR(64) NOT NULL,           -- CEMENT | FINE_AGG | COARSE_AGG | BRICK | STEEL | ...
+    name      VARCHAR(255),
+    unit      VARCHAR(16),                     -- bags | m3 | m | nos | kg | litre
+    category  VARCHAR(32),                     -- Binder | Aggregate | Unit | Steel | Stone
+    CONSTRAINT pk_material PRIMARY KEY (key)
+);
+
+CREATE TABLE mix_design (
+    key         VARCHAR(64) NOT NULL,          -- CONC_M25, CM_1_6, PCC_1_4_8
+    kind        VARCHAR(16),                   -- concrete | mortar | pcc
+    grade       VARCHAR(32),                   -- M15..M40; mix like 1:6 for mortar
+    dry_factor  DOUBLE PRECISION,              -- concrete 1.54, mortar 1.33
+    note        VARCHAR(255),
+    CONSTRAINT pk_mix_design PRIMARY KEY (key)
+);
+
+CREATE TABLE mix_component (
+    id            VARCHAR(64) NOT NULL,
+    mix_key       VARCHAR(64) NOT NULL,
+    material_key  VARCHAR(64) NOT NULL,
+    parts         DOUBLE PRECISION,            -- cement 1 : sand 1 : aggregate 2
+    CONSTRAINT pk_mix_component PRIMARY KEY (id),
+    CONSTRAINT fk_mixcomp_mix      FOREIGN KEY (mix_key)      REFERENCES mix_design (key),
+    CONSTRAINT fk_mixcomp_material FOREIGN KEY (material_key) REFERENCES material (key)
+);
+
+CREATE TABLE trade_material (
+    id            VARCHAR(64) NOT NULL,
+    trade_key     VARCHAR(64) NOT NULL,        -- work item that consumes the material
+    material_key  VARCHAR(64) NOT NULL,
+    via_mix_key   VARCHAR(64),                 -- set when consumed through a mix; null for direct units
+    note          VARCHAR(255),
+    CONSTRAINT pk_trade_material PRIMARY KEY (id),
+    CONSTRAINT fk_trademat_trade    FOREIGN KEY (trade_key)    REFERENCES trade (key),
+    CONSTRAINT fk_trademat_material FOREIGN KEY (material_key) REFERENCES material (key),
+    CONSTRAINT fk_trademat_mix      FOREIGN KEY (via_mix_key)  REFERENCES mix_design (key)
 );
 
 -- ---- Rates & priced estimate ------------------------------------------------

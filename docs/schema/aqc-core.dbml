@@ -2,8 +2,11 @@
 // AQC-Core — estimation linked-item data model (logical ERD / schema)
 //
 // This is the RELATIONAL / ERD view of the model. The app currently persists it
-// as JSON (.bbsproj, schema version 17); these tables are the logical equivalent,
-// centred on the link-rule derivation engine (trade → link_rule → derived_item).
+// as JSON (.bbsproj, schema version 17); these tables are the logical equivalent.
+// Two item relationships are modelled:
+//   • derivation  — trade → link_rule → derived_item (masonry→plaster→paint)
+//   • composition — trade/mix_design → material (concrete→cement+aggregates)
+// For a focused, code-generated view of just these two, see aqc-core-derivation.dbml.
 //
 // Open in a designer:
 //   • dbdiagram.io  — New Diagram → Import → paste this file (DBML)
@@ -12,7 +15,7 @@
 
 Project aqc_core {
   database_type: 'Generic'
-  Note: 'AQC-Core (Human Centric Works) — quantity take-off + costing. Linked-item estimation: quantities of one trade derive from another (masonry→plaster→paint, flooring→skirting).'
+  Note: 'AQC-Core (Human Centric Works) — quantity take-off + costing. Two item relationships: quantities of one trade derive from another (masonry→plaster→paint, flooring→skirting), and items decompose into materials (concrete→cement+aggregates, masonry→bricks+mortar).'
 }
 
 // ── Reference / lookup ───────────────────────────────────────────────────────
@@ -92,6 +95,42 @@ Table derived_item {
   target_unit  varchar
   chained      boolean [note: 'Source was itself produced by an upstream rule']
   Note: 'Engine output (computed by DerivationEngine). Logically a view over takeoff_item × link_rule.'
+}
+
+// ── Materials & composition (item → material) ────────────────────────────────
+
+Table material {
+  key      varchar [pk, note: 'CEMENT | FINE_AGG | COARSE_AGG | BRICK | ACC_BLOCK | CEM_BLOCK | STEEL | SIZE_STONE | WATER']
+  name     varchar
+  unit     varchar [note: 'bags | m³ | m | nos | kg | litre']
+  category varchar [note: 'Binder | Aggregate | Unit | Steel | Stone']
+  Note: 'Purchasable materials a work item resolves to (MaterialsCalculator / CivilBoqCalculator PO).'
+}
+
+Table mix_design {
+  key        varchar [pk, note: 'CONC_M25, CM_1_6, PCC_1_4_8']
+  kind       varchar [note: 'concrete | mortar | pcc']
+  grade      varchar [note: 'M15..M40 for concrete; a mix like 1:6 for mortar']
+  dry_factor double  [note: 'Wet→dry volume factor (concrete 1.54, mortar 1.33)']
+  note       varchar
+  Note: 'A ratio recipe (MaterialsCalculator.MixFor / mortar mixes). Decomposes into materials via mix_component. RCC concrete volume references a concrete grade here; steel is added directly (see trade note).'
+}
+
+Table mix_component {
+  id           varchar [pk]
+  mix_key      varchar [ref: > mix_design.key]
+  material_key varchar [ref: > material.key]
+  parts        double  [note: 'Proportion by volume, e.g. cement 1 : sand 1 : aggregate 2']
+  Note: 'One material line of a mix. e.g. CONC_M25 → CEMENT 1, FINE_AGG 1, COARSE_AGG 2.'
+}
+
+Table trade_material {
+  id           varchar [pk]
+  trade_key    varchar [ref: > trade.key, note: 'The work item that consumes the material']
+  material_key varchar [ref: > material.key]
+  via_mix_key  varchar [ref: > mix_design.key, null, note: 'Set when consumed through a mix (masonry → CM_1_6 → cement+sand); null for direct units (masonry → bricks)']
+  note         varchar
+  Note: 'Item → material edge. Direct (masonry → bricks, size-stone → stone) or through a mix (masonry / plaster → mortar → cement + sand; PCC → pcc mix).'
 }
 
 // ── Rates & priced estimate ──────────────────────────────────────────────────
