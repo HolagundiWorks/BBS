@@ -10,7 +10,8 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   paths a user would. It can navigate the app, summarise the project, run the deterministic C++
   engine for RCC checks (read-only), and — each behind an explicit confirmation dialog — add RCC
   member rows, change covers/markups, draft office correspondence, commit drawing-takeoff openings
-  to the BOQ, read the loaded takeoff PDF, and author/apply linked-item derivation rules. The C++
+  to the BOQ, read the loaded takeoff PDF, add storeys/levels, and author/apply linked-item
+  derivation rules. The C++
   engine stays the single source of truth for all numbers. Inert without an Anthropic API key;
   the key is entered in-app and stored encrypted (Windows DPAPI, per-user).
 - **Item links — data-driven linked-item derivation** — derive one trade's quantity from another

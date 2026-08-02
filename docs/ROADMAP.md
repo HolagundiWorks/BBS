@@ -55,6 +55,7 @@ notes):
 | 3b | `list_takeoff` + `commit_opening` — model-chosen opening→wall | ✅ |
 | 3c | `read_drawing` — native-PDF vision read of the loaded takeoff | ✅ |
 | 4 | `list_link_rules` + `add_link_rule` / `apply_links` — drive the linked-item model | ✅ |
+| 5 | `list_levels` + `add_level` — read storeys and add one (confirmed); rows target a level by id | ✅ |
 
 Every write is gated by a modal confirmation dialog and stays in-memory until the
 user saves. The assistant is inert without an Anthropic API key (entered in-app,
@@ -76,9 +77,7 @@ so they're best done when that verification is available.
    edit/delete) beyond the eight RCC kinds to masonry, flooring, plaster, etc.,
    respecting wall-build / finish-derivation coupling (the reason it was deferred
    in Phase 2).
-3. **Level-aware assistant edits.** Let the assistant create/select levels so
-   member and take-off edits can target a storey directly.
-4. **Manual per-line rate for linked items.** Rules can already pin a rate *code*;
+3. **Manual per-line rate for linked items.** Rules can already pin a rate *code*;
    a further step could let a rule carry a manual numeric rate, which needs the
    estimate pipeline to honour a per-row rate (today it always looks up by code).
 

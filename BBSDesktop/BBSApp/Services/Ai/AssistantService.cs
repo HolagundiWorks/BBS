@@ -173,5 +173,9 @@ public sealed class AssistantService
       + "new derivation edge (confirmed), and apply_links to materialise the derived quantities into "
       + "the take-off so they reach the BOQ and estimate (confirmed). Warn the user that a target "
       + "trade should be measured either directly or via links, not both.\n"
+      + "- For storeys: use list_levels to see the levels (ids like Lvl0, Lvl1 with heights and column "
+      + "clear height) and add_level to add one (confirmed). When you add members or take-off rows for a "
+      + "particular storey, pass that level id in the row's `level` field so quantities land on the right "
+      + "floor.\n"
       + "- Be concise and direct. Lead with the answer; keep caveats brief.";
 }

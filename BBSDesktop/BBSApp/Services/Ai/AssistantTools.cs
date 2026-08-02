@@ -71,6 +71,8 @@ public sealed class AssistantTools
         "list_link_rules" => Task.FromResult(ListLinkRules()),
         "add_link_rule" => AddLinkRuleAsync(input),
         "apply_links" => ApplyLinksAsync(input),
+        "list_levels" => Task.FromResult(ListLevels()),
+        "add_level" => AddLevelAsync(input),
         _ => Task.FromResult($"Unknown tool: {name}")
     };
 
@@ -269,6 +271,33 @@ public sealed class AssistantTools
                         + "list_link_rules. The user must approve in a dialog before it is applied — "
                         + "do not ask in chat first.",
             InputSchema = new() { Properties = new Dictionary<string, JsonElement>() }
+        },
+        new Tool
+        {
+            Name = "list_levels",
+            Description = "Return the project's storeys/levels: each level's id (e.g. Lvl0), name, "
+                        + "storey height, slab thickness, beam depth and the derived column clear "
+                        + "height, all in mm. Use the ids as the `level` field when adding rows. "
+                        + "Read-only.",
+            InputSchema = new() { Properties = new Dictionary<string, JsonElement>() }
+        },
+        new Tool
+        {
+            Name = "add_level",
+            Description = "Add a storey/level to the project (e.g. an upper floor). Levels are ids "
+                        + "Lvl0, Lvl1, … in order; the new level is appended and ids are renumbered. "
+                        + "The user must approve in a dialog before it is added — do not ask in chat "
+                        + "first.",
+            InputSchema = new()
+            {
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["name"] = Schema(new { type = "string", description = "Level name, e.g. \"Second floor\". Defaults to \"Level N\"." }),
+                    ["height_mm"] = Schema(new { type = "number", description = "Storey (floor-to-floor) height in mm. Default 3000." }),
+                    ["slab_thickness_mm"] = Schema(new { type = "number", description = "Slab thickness in mm. Default 150." }),
+                    ["beam_depth_mm"] = Schema(new { type = "number", description = "Beam depth in mm. Default 450." })
+                }
+            }
         }
     };
 
@@ -808,6 +837,63 @@ public sealed class AssistantTools
              + $"and the Estimate.{costMsg} They can be undone from the Item links page (Clear applied).";
     }
 
+    // ——— Level tools ———
+
+    private static string ListLevels()
+    {
+        var levels = new JsonArray();
+        foreach (var l in ProjectStore.Current.Levels)
+            levels.Add(new JsonObject
+            {
+                ["id"] = l.Id,
+                ["name"] = l.Name,
+                ["height_mm"] = l.HeightMm,
+                ["slab_thickness_mm"] = l.SlabThicknessMm,
+                ["beam_depth_mm"] = l.BeamDepthMm,
+                ["column_clear_height_mm"] = l.ColumnHeightMm
+            });
+        return new JsonObject { ["levels"] = levels }.ToJsonString();
+    }
+
+    private async Task<string> AddLevelAsync(IReadOnlyDictionary<string, JsonElement> input)
+    {
+        var store = ProjectStore.Current;
+        int n = store.Levels.Count;
+
+        string name = GetString(input, "name").Trim();
+        if (string.IsNullOrWhiteSpace(name)) name = n == 0 ? "Plinth" : $"Level {n}";
+
+        double height = GetNumber(input, "height_mm", 3000);
+        double slab = GetNumber(input, "slab_thickness_mm", 150);
+        double beam = GetNumber(input, "beam_depth_mm", 450);
+        if (height <= 0) return "Storey height must be greater than zero.";
+        if (slab < 0 || beam < 0) return "Slab thickness and beam depth cannot be negative.";
+
+        double clear = Math.Max(0, height - slab - beam);
+        string details = $"{name} (Lvl{n})\n"
+                       + $"height {height:0} mm · slab {slab:0} mm · beam {beam:0} mm\n"
+                       + $"column clear height {clear:0} mm";
+        if (!await _confirm.ConfirmAsync("Add level?", details))
+            return "Cancelled — no level added.";
+
+        var level = new LevelDef
+        {
+            Id = "Lvl" + n,
+            Name = name,
+            HeightMm = height,
+            SlabThicknessMm = slab,
+            BeamDepthMm = beam
+        };
+        store.Levels.Add(level);
+        store.RenumberLevels();
+        store.Notify();
+        AppNotify.Success("Level added", $"{level.Id} · {level.Name}");
+        _bus.Navigate("levels");
+        return $"Added level {level.Id} \"{level.Name}\" (height {height:0} mm, column clear "
+             + $"height {clear:0} mm). The project now has {store.Levels.Count} level(s). "
+             + $"Use \"{level.Id}\" as the level field when adding rows to this storey.";
+    }
+
     private static OpeningScheduleLinker.ScheduleKind ParseKind(string k, TakeoffItem item) =>
         k.Trim().ToLowerInvariant() switch
         {
@@ -892,4 +978,15 @@ public sealed class AssistantTools
         => input.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.String
             ? v.GetString() ?? ""
             : "";
+
+    /// <summary>Read a numeric input, accepting a JSON number or a numeric string; else the default.</summary>
+    private static double GetNumber(IReadOnlyDictionary<string, JsonElement> input, string key, double def)
+    {
+        if (!input.TryGetValue(key, out var v)) return def;
+        if (v.ValueKind == JsonValueKind.Number) return v.GetDouble();
+        if (v.ValueKind == JsonValueKind.String
+            && double.TryParse(v.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
+            return d;
+        return def;
+    }
 }
