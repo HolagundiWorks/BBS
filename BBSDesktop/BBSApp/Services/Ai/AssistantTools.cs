@@ -39,6 +39,32 @@ public sealed class AssistantTools
     private static readonly string[] LinkTradeKeys = LinkTradeRegistry.All.Select(t => t.Key).ToArray();
     private static readonly string[] LinkBases = LinkBasisInfo.All.Select(LinkBasisInfo.Label).ToArray();
 
+    // Civil-BOQ measurement kinds the assistant can add rows to (SheetForTrade + nav tag share these
+    // keys). Value = (mark prefix, the fields the calculator reads). Dimensions are in mm; unspecified
+    // string fields fall back to the calculator's own defaults. Masonry openings, doors and windows
+    // (schedules) are intentionally excluded — they carry more coupling and have dedicated flows.
+    private static readonly Dictionary<string, (string Prefix, string Fields)> CivilKinds =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["masonry"]           = ("W",   "length, height, thickness (mm); unit_type, block_size, mortar_mix, deduct_rule"),
+            ["plaster"]           = ("PL",  "length, height, thickness (mm); faces, mortar_mix, deduct_rule — or area_m2 directly"),
+            ["pcc"]               = ("PCC", "length, breadth, thickness (mm); mix (e.g. 1:4:8)"),
+            ["earthwork"]         = ("EW",  "length, breadth, depth (mm); work_type"),
+            ["ssm"]               = ("SSM", "length, breadth, height (mm); mortar_mix"),
+            ["flooring"]          = ("FL",  "length, breadth (mm); surface_kind, finish_type, tile_size, deduct_rule"),
+            ["painting"]          = ("PT",  "length, height (mm); faces, paint_location, paint_type, coats, deduct_rule — or area_m2 directly"),
+            ["waterproofing"]     = ("WP",  "work_mode (Area|Periphery), length, breadth, height (mm)"),
+            ["dpc"]               = ("DPC", "length, width, thickness (mm); mortar_mix"),
+            ["coping"]            = ("CP",  "length, width, depth (mm); concrete_grade"),
+            ["screed"]            = ("SC",  "length, breadth, thickness (mm); mix"),
+            ["vdf"]               = ("VDF", "length, breadth, thickness (mm)"),
+            ["skirting"]          = ("SK",  "length, height (mm); finish_type"),
+            ["parapet"]           = ("PR",  "length, height, thickness (mm); unit_type"),
+            ["plinth_protection"] = ("PP",  "length, breadth, thickness (mm); finish_type"),
+        };
+
+    private static readonly string[] CivilKindKeys = CivilKinds.Keys.OrderBy(k => k).ToArray();
+
     private const long MaxPdfBytes = 20 * 1024 * 1024;
 
     private readonly IAppCommandBus _bus;
@@ -73,6 +99,7 @@ public sealed class AssistantTools
         "apply_links" => ApplyLinksAsync(input),
         "list_levels" => Task.FromResult(ListLevels()),
         "add_level" => AddLevelAsync(input),
+        "add_civil_row" => AddCivilRowAsync(input),
         _ => Task.FromResult($"Unknown tool: {name}")
     };
 
@@ -298,6 +325,38 @@ public sealed class AssistantTools
                     ["slab_thickness_mm"] = Schema(new { type = "number", description = "Slab thickness in mm. Default 150." }),
                     ["beam_depth_mm"] = Schema(new { type = "number", description = "Beam depth in mm. Default 450." })
                 }
+            }
+        },
+        new Tool
+        {
+            Name = "add_civil_row",
+            Description = "Add one civil-BOQ measurement row (masonry, plaster, pcc, earthwork, ssm, "
+                        + "flooring, painting, waterproofing, dpc, coping, screed, vdf, skirting, "
+                        + "parapet, plinth_protection). Dimensions in `fields` are millimetres; "
+                        + "unspecified options fall back to the calculator's defaults; the mark is "
+                        + "auto-assigned and `level` defaults to Lvl0. Per-kind fields: "
+                        + "masonry: length,height,thickness,unit_type,mortar_mix,deduct_rule · "
+                        + "plaster/painting: length,height,faces,deduct_rule (or area_m2) · "
+                        + "pcc/screed: length,breadth,thickness,mix · earthwork: length,breadth,depth,work_type · "
+                        + "ssm: length,breadth,height,mortar_mix · flooring: length,breadth,finish_type,tile_size · "
+                        + "waterproofing: work_mode,length,breadth,height · dpc: length,width,thickness · "
+                        + "coping: length,width,depth · vdf/plinth_protection: length,breadth,thickness · "
+                        + "skirting: length,height · parapet: length,height,thickness. "
+                        + "The user must approve the change in a dialog before it is applied — do not "
+                        + "ask in chat first. (Doors/windows use the takeoff opening flow, not this.)",
+            InputSchema = new()
+            {
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["trade"] = Schema(new { type = "string", @enum = CivilKindKeys, description = "Civil BOQ kind." }),
+                    ["fields"] = Schema(new
+                    {
+                        type = "object",
+                        description = "Field key/value overrides for the new row (values as strings; dimensions in mm).",
+                        additionalProperties = new { type = "string" }
+                    })
+                },
+                Required = new List<string> { "trade" }
             }
         }
     };
@@ -899,6 +958,78 @@ public sealed class AssistantTools
         return $"Added level {level.Id} \"{level.Name}\" (height {height:0} mm, column clear "
              + $"height {clear:0} mm). The project now has {store.Levels.Count} level(s). "
              + $"Use \"{level.Id}\" as the level field when adding rows to this storey.";
+    }
+
+    // ——— Civil-BOQ tools ———
+
+    private async Task<string> AddCivilRowAsync(IReadOnlyDictionary<string, JsonElement> input)
+    {
+        string trade = GetString(input, "trade").Trim().ToLowerInvariant();
+        if (!CivilKinds.TryGetValue(trade, out var meta))
+            return $"add_civil_row supports civil kinds only: {string.Join(", ", CivilKindKeys)}.";
+
+        var sheet = ProjectStore.Current.SheetForTrade(trade);
+        if (sheet is null) return $"No editable sheet for \"{trade}\".";
+
+        // Start clean (per-row geometry is unique) and let the calculator's own field defaults apply
+        // to anything the caller doesn't set; only the mark and level are stamped explicitly.
+        var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var setKeys = new List<string>();
+        if (input.TryGetValue("fields", out var fieldsEl) && fieldsEl.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in fieldsEl.EnumerateObject())
+            {
+                row[prop.Name] = prop.Value.ValueKind == JsonValueKind.String
+                    ? prop.Value.GetString() ?? ""
+                    : prop.Value.GetRawText();
+                setKeys.Add(prop.Name);
+            }
+        }
+
+        if (!row.TryGetValue("level", out var lv) || string.IsNullOrWhiteSpace(lv))
+            row["level"] = LastLevel(sheet);
+
+        bool callerMark = row.TryGetValue("mark", out var mk) && !string.IsNullOrWhiteSpace(mk);
+        bool dupMark = callerMark && sheet.Any(r =>
+            r.TryGetValue("mark", out var em) && em.Equals(mk, StringComparison.OrdinalIgnoreCase));
+        if (!callerMark || dupMark)
+            row["mark"] = NextCivilMark(sheet, meta.Prefix);
+
+        string head = $"{trade} · mark {row["mark"]}, level {row["level"]}";
+        string body = setKeys.Count > 0
+            ? "You set: " + string.Join(", ", setKeys
+                .Where(k => !k.Equals("mark", StringComparison.OrdinalIgnoreCase)
+                         && !k.Equals("level", StringComparison.OrdinalIgnoreCase))
+                .Select(k => $"{k}={row.GetValueOrDefault(k, "")}"))
+            : "Using calculator defaults.";
+        if (!await _confirm.ConfirmAsync($"Add {trade} row?", head + "\n" + body))
+            return $"Cancelled — no {trade} row added.";
+
+        sheet.Add(row);
+        ProjectStore.Current.Notify();
+        AppNotify.Success($"{trade} row added", row["mark"]);
+        _bus.Navigate(trade);
+        return $"Added a {trade} row (mark {row["mark"]}, level {row["level"]}). "
+             + $"The {trade} sheet now has {sheet.Count} row(s). Quantities recompute in Quantities / Estimate.";
+    }
+
+    private static string LastLevel(System.Collections.ObjectModel.ObservableCollection<Dictionary<string, string>> sheet)
+    {
+        for (int i = sheet.Count - 1; i >= 0; i--)
+            if (sheet[i].TryGetValue("level", out var lv) && !string.IsNullOrWhiteSpace(lv))
+                return lv;
+        return ProjectStore.Current.Levels.Count > 0 ? ProjectStore.Current.Levels[0].Id : "Lvl0";
+    }
+
+    private static string NextCivilMark(
+        System.Collections.ObjectModel.ObservableCollection<Dictionary<string, string>> sheet, string prefix)
+    {
+        int max = 0;
+        foreach (var r in sheet)
+            if (r.TryGetValue("mark", out var m) && m.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(m.AsSpan(prefix.Length), out var n))
+                max = Math.Max(max, n);
+        return prefix + (max + 1);
     }
 
     private static OpeningScheduleLinker.ScheduleKind ParseKind(string k, TakeoffItem item) =>

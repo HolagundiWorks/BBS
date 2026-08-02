@@ -9,9 +9,10 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - **AI assistant (opt-in)** — a built-in copilot on the command bar that drives the same code
   paths a user would. It can navigate the app, summarise the project, run the deterministic C++
   engine for RCC checks (read-only), and — each behind an explicit confirmation dialog — add RCC
-  member rows, change covers/markups, draft office correspondence, commit drawing-takeoff openings
-  to the BOQ, read the loaded takeoff PDF, add storeys/levels, and author/apply linked-item
-  derivation rules. The C++
+  member rows, add civil-BOQ measurement rows (masonry, plaster, flooring, painting, PCC, etc.),
+  change covers/markups, draft office correspondence, commit drawing-takeoff openings to the BOQ,
+  read the loaded takeoff PDF, add storeys/levels, and author/apply linked-item derivation rules.
+  The C++
   engine stays the single source of truth for all numbers. Inert without an Anthropic API key;
   the key is entered in-app and stored encrypted (Windows DPAPI, per-user).
 - **ERD export (DBML / SQL)** — a generator (`SchemaExport`) emits the full logical schema for
