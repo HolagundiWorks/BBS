@@ -3,8 +3,7 @@
 --
 -- Relational view of the model the app persists as JSON (.bbsproj, version 17).
 -- Two item relationships: derivation (trade -> link_rule -> derived_item) and
--- composition (trade / mix_design -> material). A focused, code-generated view of
--- just these two is in aqc-core-derivation.sql.
+-- composition (trade / mix_design -> material).
 --
 -- Portable ANSI-ish DDL. Import into a Database Schema Designer:
 --   DBeaver / MySQL Workbench (reverse engineer) / SSMS / pgAdmin / dbdiagram.io

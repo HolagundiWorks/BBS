@@ -6,7 +6,6 @@
 // Two item relationships are modelled:
 //   • derivation  — trade → link_rule → derived_item (masonry→plaster→paint)
 //   • composition — trade/mix_design → material (concrete→cement+aggregates)
-// For a focused, code-generated view of just these two, see aqc-core-derivation.dbml.
 //
 // Open in a designer:
 //   • dbdiagram.io  — New Diagram → Import → paste this file (DBML)
