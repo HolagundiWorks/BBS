@@ -5,7 +5,23 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **AI assistant (opt-in)** — a built-in copilot on the command bar that drives the same code
+  paths a user would. It can navigate the app, summarise the project, run the deterministic C++
+  engine for RCC checks (read-only), and — each behind an explicit confirmation dialog — add RCC
+  member rows, change covers/markups, draft office correspondence, commit drawing-takeoff openings
+  to the BOQ, read the loaded takeoff PDF, and author/apply linked-item derivation rules. The C++
+  engine stays the single source of truth for all numbers. Inert without an Anthropic API key;
+  the key is entered in-app and stored encrypted (Windows DPAPI, per-user).
+- **Item links — data-driven linked-item derivation** — derive one trade's quantity from another
+  (e.g. plaster = 2 × masonry face area, painting = plaster area, skirting = flooring perimeter).
+  Editable rules with a standard India-practice library, a chained derivation preview, and
+  Apply-to-sheets to materialise the derived quantities into the take-off so they flow into the
+  BOQ and estimate (idempotent, undoable via Clear applied).
+
 ### Changed
+- Project file (`.bbsproj`) format bumped to **v17** — adds the linked-item derivation rules
+  (`link_rules`). Older files load unchanged and seed the standard rule library.
 - **Relicensed** from Apache-2.0 to a **dual license**: GNU AGPL v3 (Community Edition) or a
   commercial license from Human Centric Works. Free for individuals, research and internal
   business use; a commercial license is required to resell, embed in a proprietary product,

@@ -1,6 +1,6 @@
 # AI Integration Plan — AQC‑Core
 
-**Status:** Phases 0–3 implemented on this branch. Phase 3's takeoff items are delivered **additively at the tool layer** (not by rewiring the takeoff UI) — see the notes.
+**Status:** Phases 0–4 implemented on this branch. Phases 3–4's takeoff and linked‑item tools are delivered **additively at the tool layer** (not by rewiring their UIs) — see the notes.
 **Scope:** Where and how to add an AI assistant/copilot to AQC‑Core, and the seams it plugs into.
 **Branch:** `claude/ai-entry-points-kgcmip`
 
@@ -233,6 +233,7 @@ every page.
 | **3a** | Correspondence drafting: `create_correspondence` write tool — the assistant drafts the body and inserts an editable, unnumbered draft into the office register (confirmed). | medium | ✅ done |
 | **3b** | Model‑chosen opening→wall assignment: `list_takeoff` (read) + `commit_opening` (confirmed) let the assistant pick the wall and run the deterministic `OpeningScheduleLinker.Commit`. The heuristic stays as the fallback/default. | medium (tool‑layer, additive) | ✅ done |
 | **3c** | Vision drawing read: `read_drawing` sends the loaded takeoff PDF to Claude (native PDF input) and returns an analysis the assistant can act on. | medium (tool‑layer, additive) | ✅ done |
+| **4** | Linked‑item derivation: `list_link_rules` (read) + `add_link_rule` / `apply_links` (confirmed) let the assistant read, author and apply the data‑driven derivation model (masonry→plaster→paint, flooring→skirting) so derived quantities reach the BOQ/estimate. | medium (tool‑layer, additive) | ✅ done |
 
 **Phase 1 notes as built:**
 - Uses the official `Anthropic` .NET SDK (`claude-opus-5`, adaptive thinking) via a **manual tool loop** in `AssistantService` — the SDK's `BetaToolRunner` handler-registration API isn't in the reference docs, so the loop is hand-written to stay on documented ground.
@@ -252,6 +253,10 @@ every page.
 - **3b (done) — model‑chosen opening→wall, additively.** Rather than rewire the synchronous takeoff UI commit path (the risky part), the value lands at the tool layer: `list_takeoff` exposes measured walls + openings + BOQ wall marks, and `commit_opening(opening_id, kind?, wall_mark?)` lets the **model** choose the wall and runs the deterministic `OpeningScheduleLinker.Commit` (confirmed, then navigates). If the model omits the wall, `SuggestWallMark` is the fallback — so the heuristic isn't removed, it's the default the AI can override with reasoning.
 - **3c (done) — vision drawing read, additively.** `read_drawing(question?)` reads `Takeoff.PdfPath` and sends the **PDF straight to Claude** (native base64 PDF input — no PDF‑to‑image rendering, no `Windows.Data.Pdf`), returning an analysis of rooms/walls/openings/dimensions. This is advisory: the AI gets eyes on the drawing and can then act through the confirmed write tools. Capped at 20 MB.
 - **Deliberately still deferred:** pixel‑level auto‑pre‑fill that detects geometry from the drawing and injects scaled `TakeoffItem`s into the canvas. That needs the manual scale calibration (`MmPerPx`) and reliable pixel→mm mapping, and is genuinely hard to get right without a **live compile/run loop** — which this environment (Windows‑only WinUI, not buildable here) can't provide.
+
+**Phase 4 notes as built:**
+- **Linked‑item derivation over the tool layer.** The data‑driven derivation model (`LinkRuleBook` → `DerivationEngine`, masonry→plaster→paint, flooring→skirting) is now assistant‑drivable, additively, without touching the `Item links` UI. `list_link_rules` (read) returns the rules plus the live derived totals from `DerivationEngine.Preview`/`Totals`; `add_link_rule` (confirmed) authors a new derivation edge (source/target trade keys, basis, factor, per‑item) validated against `LinkTradeRegistry`/`LinkBasisInfo`; `apply_links` (confirmed) runs `DerivationEngine.Apply` to materialise the derived quantities into the take‑off sheets so they flow into the BOQ and estimate.
+- Both writes reuse the Phase 2 confirmation gate (`IAssistantConfirm`), navigate to the `links` page on success, and stay **in‑memory only** — nothing is saved until the user saves. Apply is idempotent (prior applied rows are replaced) and undoable from the page (Clear applied); the system prompt reminds the assistant a target trade should be measured either directly or via links, not both.
 
 Phase 0 is worth doing on its own — exposing `NavigateTo` as a command bus is a
 clean improvement regardless of whether AI ships.

@@ -34,6 +34,11 @@ public sealed class AssistantTools
     // Correspondence type codes (LTR, MEMO, …), derived so they can't drift from the register.
     private static readonly string[] DocCodes = DocTypeInfo.All.Select(t => t.Code).ToArray();
 
+    // Linkable trade keys and derivation bases, derived from the registry so the
+    // tool schema can never drift from LinkTradeRegistry / LinkBasisInfo.
+    private static readonly string[] LinkTradeKeys = LinkTradeRegistry.All.Select(t => t.Key).ToArray();
+    private static readonly string[] LinkBases = LinkBasisInfo.All.Select(LinkBasisInfo.Label).ToArray();
+
     private const long MaxPdfBytes = 20 * 1024 * 1024;
 
     private readonly IAppCommandBus _bus;
@@ -63,6 +68,9 @@ public sealed class AssistantTools
         "list_takeoff" => Task.FromResult(ListTakeoff()),
         "commit_opening" => CommitOpeningAsync(input),
         "read_drawing" => ReadDrawingAsync(input),
+        "list_link_rules" => Task.FromResult(ListLinkRules()),
+        "add_link_rule" => AddLinkRuleAsync(input),
+        "apply_links" => ApplyLinksAsync(input),
         _ => Task.FromResult($"Unknown tool: {name}")
     };
 
@@ -215,6 +223,50 @@ public sealed class AssistantTools
                     ["question"] = Schema(new { type = "string", description = "Optional specific question about the drawing." })
                 }
             }
+        },
+        new Tool
+        {
+            Name = "list_link_rules",
+            Description = "Return the linked-item derivation rules and a preview of what they "
+                        + "currently derive. Link rules compute one trade's quantity from another "
+                        + "(e.g. plaster = 2 × masonry face area, painting = 1 × plaster area, "
+                        + "skirting = flooring perimeter). Includes each rule's source/target/basis/"
+                        + "factor and the derived totals per target trade from the current take-off. "
+                        + "Read-only.",
+            InputSchema = new() { Properties = new Dictionary<string, JsonElement>() }
+        },
+        new Tool
+        {
+            Name = "add_link_rule",
+            Description = "Add a linked-item derivation rule: target quantity = factor × the chosen "
+                        + "basis measure of the source trade. Source and target are trade keys (see "
+                        + "list_link_rules). Basis is Area, Volume, Length, Perimeter or Count. Rules "
+                        + "chain (a target can be another rule's source). The user must approve the "
+                        + "change in a dialog before it is added — do not ask in chat first.",
+            InputSchema = new()
+            {
+                Properties = new Dictionary<string, JsonElement>
+                {
+                    ["source"] = Schema(new { type = "string", @enum = LinkTradeKeys, description = "Source (producer) trade key." }),
+                    ["target"] = Schema(new { type = "string", @enum = LinkTradeKeys, description = "Target (consumer) trade key." }),
+                    ["basis"] = Schema(new { type = "string", @enum = LinkBases, description = "Which source measure drives the quantity." }),
+                    ["factor"] = Schema(new { type = "number", description = "Multiplier applied to the basis measure (default 1)." }),
+                    ["name"] = Schema(new { type = "string", description = "Optional rule name; a source→target label is used if omitted." }),
+                    ["target_unit"] = Schema(new { type = "string", description = "Optional unit for the derived quantity; defaults to the target trade's unit." }),
+                    ["per_item"] = Schema(new { type = "boolean", description = "True (default): one derived line per source item, keeping mark/level. False: a single aggregate line." })
+                },
+                Required = new List<string> { "source", "target", "basis" }
+            }
+        },
+        new Tool
+        {
+            Name = "apply_links",
+            Description = "Materialise the enabled link rules' derived quantities into the target "
+                        + "take-off sheets as tagged rows, so they flow into the BOQ and estimate. "
+                        + "Idempotent — previously applied link rows are replaced. Preview first with "
+                        + "list_link_rules. The user must approve in a dialog before it is applied — "
+                        + "do not ask in chat first.",
+            InputSchema = new() { Properties = new Dictionary<string, JsonElement>() }
         }
     };
 
@@ -599,6 +651,133 @@ public sealed class AssistantTools
         {
             return $"Could not analyze the drawing: {ex.Message}";
         }
+    }
+
+    // ——— Linked-item derivation tools ———
+
+    private static string ListLinkRules()
+    {
+        var book = ProjectStore.Current.LinkRules;
+
+        var rules = new JsonArray();
+        foreach (var r in book.Rules)
+            rules.Add(new JsonObject
+            {
+                ["id"] = r.Id,
+                ["name"] = string.IsNullOrWhiteSpace(r.Name)
+                    ? $"{LinkTradeRegistry.Display(r.SourceTrade)} → {LinkTradeRegistry.Display(r.TargetTrade)}"
+                    : r.Name,
+                ["enabled"] = r.Enabled,
+                ["source"] = r.SourceTrade,
+                ["target"] = r.TargetTrade,
+                ["basis"] = LinkBasisInfo.Label(r.Basis),
+                ["factor"] = r.Factor,
+                ["target_unit"] = r.TargetUnit,
+                ["per_item"] = r.PerItem
+            });
+
+        var items = DerivationEngine.Preview(ProjectStore.Current, book);
+        var totals = new JsonArray();
+        foreach (var t in DerivationEngine.Totals(items))
+            totals.Add(new JsonObject
+            {
+                ["trade"] = t.Trade,
+                ["qty"] = Math.Round(t.Qty, 3),
+                ["unit"] = t.Unit,
+                ["lines"] = t.Lines
+            });
+
+        return new JsonObject
+        {
+            ["rules"] = rules,
+            ["derived_totals"] = totals,
+            ["trade_keys"] = new JsonArray(LinkTradeKeys.Select(k => (JsonNode)k).ToArray())
+        }.ToJsonString();
+    }
+
+    private async Task<string> AddLinkRuleAsync(IReadOnlyDictionary<string, JsonElement> input)
+    {
+        string source = GetString(input, "source").Trim();
+        string target = GetString(input, "target").Trim();
+        var srcDef = LinkTradeRegistry.ByKey(source);
+        var tgtDef = LinkTradeRegistry.ByKey(target);
+        if (srcDef is null) return $"Unknown source trade \"{source}\". Supported: {string.Join(", ", LinkTradeKeys)}.";
+        if (tgtDef is null) return $"Unknown target trade \"{target}\". Supported: {string.Join(", ", LinkTradeKeys)}.";
+
+        var basis = LinkBasisInfo.Parse(GetString(input, "basis"));
+
+        double factor = 1.0;
+        if (input.TryGetValue("factor", out var fEl))
+        {
+            if (fEl.ValueKind == JsonValueKind.Number) factor = fEl.GetDouble();
+            else if (fEl.ValueKind == JsonValueKind.String
+                     && double.TryParse(fEl.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var fd))
+                factor = fd;
+        }
+        if (factor <= 0) return $"Factor must be greater than zero (got {factor.ToString("0.###", CultureInfo.InvariantCulture)}).";
+
+        bool perItem = true;
+        if (input.TryGetValue("per_item", out var pEl))
+        {
+            if (pEl.ValueKind == JsonValueKind.False) perItem = false;
+            else if (pEl.ValueKind == JsonValueKind.String && TryParseBool(pEl.GetString() ?? "", out var pb)) perItem = pb;
+        }
+
+        string unit = GetString(input, "target_unit").Trim();
+        if (string.IsNullOrWhiteSpace(unit)) unit = tgtDef.Unit;
+
+        string name = GetString(input, "name").Trim();
+        if (string.IsNullOrWhiteSpace(name)) name = $"{srcDef.Display} → {tgtDef.Display}";
+
+        var rule = new LinkRule
+        {
+            Name = name,
+            SourceTrade = srcDef.Key,
+            TargetTrade = tgtDef.Key,
+            Basis = basis,
+            Factor = factor,
+            TargetUnit = unit,
+            PerItem = perItem,
+            Enabled = true
+        };
+
+        string equation = $"{tgtDef.Display} = {factor.ToString("0.###", CultureInfo.InvariantCulture)} × "
+                        + $"{srcDef.Display} {LinkBasisInfo.Label(basis).ToLowerInvariant()} ({unit})";
+        string details = $"{name}\n{equation}\n{(perItem ? "one line per source item" : "single aggregate line")}";
+        if (!await _confirm.ConfirmAsync("Add link rule?", details))
+            return "Cancelled — no link rule added.";
+
+        ProjectStore.Current.LinkRules.Rules.Add(rule);
+        ProjectStore.Current.Notify();
+        AppNotify.Success("Link rule added", equation);
+        _bus.Navigate("links");
+        return $"Added link rule \"{name}\": {equation}. Preview it with list_link_rules, "
+             + "then apply_links to write the derived quantities into the take-off.";
+    }
+
+    private async Task<string> ApplyLinksAsync(IReadOnlyDictionary<string, JsonElement> input)
+    {
+        var store = ProjectStore.Current;
+        var book = store.LinkRules;
+
+        var items = DerivationEngine.Preview(store, book);
+        var totals = DerivationEngine.Totals(items);
+        if (totals.Count == 0)
+            return "No linked quantities to apply — add take-off for the source trades (masonry, "
+                 + "flooring …) and enable rules, then try again.";
+
+        string list = string.Join("\n", totals.Select(t =>
+            $"  • {t.Trade}  {t.Qty.ToString("0.##", CultureInfo.InvariantCulture)} {t.Unit}  ({t.Lines} line(s))"));
+        string details = "These linked quantities will be written into the take-off sheets so they "
+                       + "flow into the BOQ and estimate. Previously applied link rows are replaced:\n\n" + list;
+        if (!await _confirm.ConfirmAsync("Apply linked items?", details))
+            return "Cancelled — no linked quantities applied.";
+
+        int n = DerivationEngine.Apply(store, book);
+        AppNotify.Success("Linked items applied", $"{n} row(s) written to take-off sheets");
+        _bus.Navigate("links");
+        return $"Applied {n} linked row(s) to the take-off sheets — they now flow into Quantities "
+             + "and the Estimate. They can be undone from the Item links page (Clear applied).";
     }
 
     private static OpeningScheduleLinker.ScheduleKind ParseKind(string k, TakeoffItem item) =>

@@ -167,5 +167,11 @@ public sealed class AssistantService
       + "to a wall as a door/window/deduct (confirmed). When committing an opening, choose the "
       + "wall yourself from the masonry walls on that opening's level rather than relying only on "
       + "the geometric default.\n"
+      + "- For linked estimation: link rules derive one trade's quantity from another (plaster from "
+      + "masonry face area, painting from plaster, skirting from flooring perimeter). Use "
+      + "list_link_rules to see the rules and what they currently derive, add_link_rule to create a "
+      + "new derivation edge (confirmed), and apply_links to materialise the derived quantities into "
+      + "the take-off so they reach the BOQ and estimate (confirmed). Warn the user that a target "
+      + "trade should be measured either directly or via links, not both.\n"
       + "- Be concise and direct. Lead with the answer; keep caveats brief.";
 }
