@@ -6,9 +6,11 @@ RCC bar bending schedules, civil BOQ, drawing takeoff, rate books, DSR-style est
 
 One project can be operated as either a **Project Manager / PMC** or a **Contractor**: each persona has its own letterhead and numbering series, and every letter, bill and order is branded and numbered accordingly.
 
+**Linked-item derivation** derives one trade's quantity from another (plaster from masonry, painting from plaster, skirting from flooring), and an **opt-in AI assistant** can navigate the app, answer questions, run the deterministic engine, and make confirmed changes — all while the C++ engine stays the single source of truth for every number.
+
 Quantities follow IS 456 / IS 1200–derived conventions — always cross-check against drawings.
 
-**Version:** 1.1.0 · **License:** [AGPL-3.0](LICENSE) (Community) or [Commercial](LICENSING.md) · see also [NOTICE](NOTICE) · [CHANGELOG](CHANGELOG.md)
+**Version:** 1.1.0 · **License:** [AGPL-3.0](LICENSE) (Community) or [Commercial](LICENSING.md) · see also [NOTICE](NOTICE) · [CHANGELOG](CHANGELOG.md) · [ROADMAP](docs/ROADMAP.md)
 
 ## Stack
 
@@ -80,6 +82,7 @@ Output: `BBSDesktop\artifacts\msix\*.msix`
 | Civil BOQ | Masonry, plaster, PCC, earthwork, SSM, shuttering, flooring, paint, doors/windows, etc. |
 | Openings | Doors/windows **On wall** mark → deduct from that masonry wall (IS 1200 ignore-small) |
 | Takeoff | PDF drawing measure → Commit to BOQ |
+| Item links | Data-driven linked-item derivation (plaster from masonry, painting from plaster, skirting from flooring) — editable rules, chained preview, Apply-to-sheets into the BOQ/estimate |
 | Rate book | App-level versioned rates (`%LocalAppData%\AQCCore\`) |
 | Estimate | DSR abstract (L/B/H, area, volume) + % markups → grand total; PDF sketches appendix |
 | PO / report | Steel & materials PO; project PDF with BOQ tables + sketches |
@@ -90,13 +93,15 @@ Output: `BBSDesktop\artifacts\msix\*.msix`
 | Accounts | RA bills with retention + statutory deductions (GST, TDS 194C, labour cess, GST-TDS), certify & number, cash/bank book, per-contractor ledger |
 | Stores | Purchase orders, goods-receipt notes, inventory, supplier / warehouse masters |
 | HR & resources | Sites, resources, employees, attendance & payroll (payroll register PDF) |
-| Project file | `.bbsproj` (JSON, v16 — project info, personas, estimate markups, schedule, office, contracts, accounts, stores, HR) |
+| AI assistant | Opt-in copilot on the command bar — navigate, summarise the project, run the engine (read-only), and (each confirmed) add RCC rows, change covers/markups, draft correspondence, commit takeoff openings, read the takeoff PDF, author/apply link rules. Needs an Anthropic API key (entered in-app, stored encrypted); inert without one |
+| Project file | `.bbsproj` (JSON, v17 — project info, personas, estimate markups, schedule, office, contracts, accounts, stores, HR, link rules) |
 
 ## Settings & data locations
 
 | Data | Path |
 |------|------|
 | Rate books / logos | `%LocalAppData%\AQCCore\` (reads legacy `%LocalAppData%\BOQCore\` if present) |
+| AI assistant API key | `%LocalAppData%\AQCCore\` — encrypted with Windows DPAPI (per-user); or the `ANTHROPIC_API_KEY` env var |
 | Project | User-chosen `.bbsproj` |
 
 ## Branding
@@ -121,3 +126,5 @@ See [LICENSING.md](LICENSING.md). Commercial enquiries: **office@hcworks.in** ·
 ## Disclaimer
 
 Estimation tool only — not a substitute for structural design or site mix design (M30+).
+
+The AI assistant is **opt-in** and disabled unless you supply an Anthropic API key. When used, it sends the parts of your project it needs to Anthropic's API to answer — keep it off for confidential work if that is a concern. It never computes quantities itself: all numbers come from the deterministic C++ engine.
