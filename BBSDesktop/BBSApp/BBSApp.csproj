@@ -34,11 +34,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250108002" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
     <PackageReference Include="CommunityToolkit.WinUI.UI.Controls.DataGrid" Version="7.1.2" />
     <PackageReference Include="QuestPDF" Version="2025.7.1" />
     <PackageReference Include="Anthropic" Version="12.9.0" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.11" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
 
@@ -99,9 +101,6 @@
       <_EngineDest Condition="'$(PublishDir)' != ''">$(PublishDir)</_EngineDest>
       <_EngineDest Condition="'$(PublishDir)' == ''">$(OutputPath)</_EngineDest>
     </PropertyGroup>
-    <Copy SourceFiles="$(_EngineDll)"
-          DestinationFolder="$(_EngineDest)"
-          SkipUnchangedFiles="true"
-          Condition="Exists('$(_EngineDll)')" />
+    <Copy SourceFiles="$(_EngineDll)" DestinationFolder="$(_EngineDest)" SkipUnchangedFiles="true" Condition="Exists('$(_EngineDll)')" />
   </Target>
 </Project>

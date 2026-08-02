@@ -28,6 +28,10 @@
                 <Button Content="Export ERD" Style="{StaticResource SecondaryButtonStyle}"
                         Click="ExportSchema_Click" AutomationProperties.Name="Export the ERD as DBML and SQL"
                         ToolTipService.ToolTip="Regenerate the logical ERD (aqc-core.dbml + .sql) for dbdiagram.io from the live model."/>
+                <Button Content="Export .aqcdb" Style="{StaticResource SecondaryButtonStyle}"
+                        Click="ExportDb_Click" AutomationProperties.Name="Export project to SQLite database"/>
+                <Button Content="Verify DB" Style="{StaticResource SecondaryButtonStyle}"
+                        Click="VerifyDb_Click" AutomationProperties.Name="Verify database round-trip"/>
                 <Button Content="Refresh preview" Style="{StaticResource PrimaryButtonStyle}"
                         Click="RefreshPreview_Click" AutomationProperties.Name="Refresh derivation preview"/>
             </StackPanel>

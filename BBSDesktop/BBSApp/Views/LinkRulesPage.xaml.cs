@@ -2,8 +2,10 @@
 // SPDX-FileCopyrightText: 2026 Human Centric Works, Hospet
 
 using System.Globalization;
+using System.IO;
 using BBSApp.Controls;
 using BBSApp.Services;
+using BBSApp.Services.Db;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -404,6 +406,45 @@ public sealed partial class LinkRulesPage : Page
 
     private static string? TagOf(ComboBox combo) =>
         combo.SelectedItem is ComboBoxItem { Tag: string s } ? s : null;
+
+    private void ExportDb_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "AQC-Core");
+            string safe = string.Join("_",
+                (ProjectStore.Current.Name ?? "project").Split(Path.GetInvalidFileNameChars()));
+            if (string.IsNullOrWhiteSpace(safe)) safe = "project";
+            string path = Path.Combine(dir, safe + AqcSqliteStore.FileExtension);
+            AqcSqliteStore.Export(ProjectStore.Current, path);
+            Success("Exported", $"SQLite database written to {path}");
+        }
+        catch (Exception ex)
+        {
+            Warn("Export failed", ex.Message);
+        }
+    }
+
+    private void VerifyDb_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string result = AqcSqliteStore.SelfTest(ProjectStore.Current);
+            // SelfTest wipes and re-imports the store — refresh the page off the restored data.
+            RefreshRuleCombo(Book.Rules.Count > 0 ? 0 : -1);
+            RefreshRulesTable();
+            RefreshPreview();
+            if (result.StartsWith("Round-trip OK", StringComparison.Ordinal))
+                Success("Database round-trip OK", result);
+            else
+                Warn("Round-trip mismatch", result);
+        }
+        catch (Exception ex)
+        {
+            Warn("Verify failed", ex.Message);
+        }
+    }
 
     private void Success(string title, string msg) => Show(title, msg, InfoBarSeverity.Success);
     private void Warn(string title, string msg) => Show(title, msg, InfoBarSeverity.Warning);
