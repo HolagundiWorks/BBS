@@ -176,6 +176,7 @@ public sealed partial class MainWindow : Window, IAppCommandBus, IAssistantConfi
             Cmd("po", "Purchase orders", Glyph("\uE7BF")),
             Cmd("estimate", "Estimate", Glyph("\uE8EF")),
             Cmd("links", "Item links", Glyph("\uE71B")),
+            Cmd("datamodel", "Data model", Glyph("\uE8AB")),
             Cmd("ratebook", "Rate book", Glyph("\uE8F1")),
             Cmd("report", "Report", Glyph("\uE8A5")),
             Cmd("settings_project", "Project", Glyph("\uE8B7")),
@@ -258,6 +259,7 @@ public sealed partial class MainWindow : Window, IAppCommandBus, IAssistantConfi
         "windows" or "window" => "WN",
         "estimate" => "ES",
         "links" => "LK",
+        "datamodel" => "DM",
         "ratebook" => "RB",
         _ => tag.Length >= 2 ? tag[..2].ToUpperInvariant() : tag.ToUpperInvariant()
     };
@@ -511,6 +513,7 @@ public sealed partial class MainWindow : Window, IAppCommandBus, IAssistantConfi
             "po" => new PurchaseOrderPage(),
             "estimate" => new EstimatePage(),
             "links" => new LinkRulesPage(),
+            "datamodel" => new DataModelPage(),
             "ratebook" => new RateBookPage(),
             "report" => new ReportPage(),
             "settings" or "settings_project" => new SettingsPage(SettingsPage.SettingsTab.Project),
