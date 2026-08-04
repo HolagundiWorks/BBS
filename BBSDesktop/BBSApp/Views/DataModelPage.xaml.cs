@@ -11,116 +11,67 @@ namespace BBSApp.Views;
 
 public sealed partial class DataModelPage : Page
 {
-    private readonly ResultTable _itemTable = new();
-    private readonly ErdCanvas _canvas = new();
-    private ErdSchema _schema = new();
-    private bool _userZoomed;
-    private bool _diagramReady;
+    private readonly ResultTable _table = new();
 
     public DataModelPage()
     {
         InitializeComponent();
-        _itemTable.SetAutomationName("Item relationships");
-        TableHost.Child = _itemTable;
-        CanvasHost.Content = _canvas;
-        CanvasHost.SizeChanged += (_, _) =>
-        {
-            if (Diagram && !_userZoomed && CanvasHost.ViewportWidth > 0) FitToView();
-        };
-        CanvasHost.ViewChanged += (_, _) => UpdateZoomText();
+        _table.SetAutomationName("Item table");
+        TableHost.Child = _table;
         Loaded += OnLoaded;
     }
 
-    private bool Diagram => (ViewCombo.SelectedItem as ComboBoxItem)?.Tag as string == "diagram";
+    private bool Definitions => (ViewCombo.SelectedItem as ComboBoxItem)?.Tag as string == "definitions";
 
-    private void OnLoaded(object sender, RoutedEventArgs e) => ShowItems();
+    private void OnLoaded(object sender, RoutedEventArgs e) => Render();
 
     private void ViewCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return;
-        if (Diagram) ShowDiagram();
-        else ShowItems();
+        if (IsLoaded) Render();
     }
 
-    // ── Items table ──────────────────────────────────────────────────────────
-
-    private void ShowItems()
+    private void Render()
     {
-        TableHost.Visibility = Visibility.Visible;
-        CanvasHost.Visibility = Visibility.Collapsed;
-        DiagramTools.Visibility = Visibility.Collapsed;
+        if (Definitions) ShowDefinitions();
+        else ShowRelationships();
+    }
 
+    // Item | UOM | Rate | Inputs | Outputs — the pricing / derivation summary.
+    private void ShowRelationships()
+    {
+        SubtitleText.Text = "Each item with its unit and rate, what feeds it (inputs — source items + materials) "
+                          + "and what it produces (outputs — derived items).";
         var rows = ItemRelations.Build();
-        _itemTable.SetTable(
+        _table.SetTable(
             new[] { "Item", "UOM", "Rate", "Inputs", "Outputs" },
             rows.Select(r => (IReadOnlyList<string>)new[] { r.Item, r.Uom, r.Rate, r.Inputs, r.Outputs }).ToList());
 
         var ver = RateBookStore.Current.ActiveOrFirst();
-        Info.Title = "Item relationships";
-        Info.Message = $"{rows.Count} items · unit, rate, inputs (source items + materials) and outputs (derived items)."
+        Info.Title = "Relationships";
+        Info.Message = $"{rows.Count} items · unit, rate, inputs and outputs."
                      + (ver is not null ? $" Rates from “{ver.Name}”." : " No rate book loaded.");
         Info.Severity = InfoBarSeverity.Informational;
     }
 
-    // ── Schema diagram ───────────────────────────────────────────────────────
-
-    private void ShowDiagram()
+    // Item | UOM | L | B | H | Area | Volume | Material 1-3 | Calculation recipe — the item master.
+    private void ShowDefinitions()
     {
-        TableHost.Visibility = Visibility.Collapsed;
-        CanvasHost.Visibility = Visibility.Visible;
-        DiagramTools.Visibility = Visibility.Visible;
+        SubtitleText.Text = "Each item's measurement dimensions and material recipe — the values that drive "
+                          + "measurement → sub-item extraction and the material composition.";
+        var rows = ItemDefinitions.Build();
+        _table.SetTable(
+            new[] { "Item", "UOM", "Length", "Breadth", "Height", "Area", "Volume",
+                    "Material 1", "Material 2", "Material 3", "Calculation recipe" },
+            rows.Select(r => (IReadOnlyList<string>)new[]
+            {
+                r.Item, r.Uom, r.Length, r.Breadth, r.Height, r.Area, r.Volume,
+                r.Material1, r.Material2, r.Material3, r.Recipe
+            }).ToList());
 
-        if (!_diagramReady)
-        {
-            _schema = SchemaModel.FromExport();
-            _canvas.Render(_schema);
-            _diagramReady = true;
-        }
-        _userZoomed = false;
-        FitToView();
-
-        int cols = _schema.Tables.Sum(t => t.Columns.Count);
-        Info.Title = "Schema diagram";
-        Info.Message = $"Full logical schema — {_schema.Tables.Count} entities · {cols} columns · {_schema.Relations.Count} foreign keys.";
+        Info.Title = "Definitions";
+        Info.Message = $"{rows.Count} items · measurement dimensions (L/B/H → Area/Volume), materials, and the "
+                     + "calculation recipe used to extract sub-items.";
         Info.Severity = InfoBarSeverity.Informational;
-    }
-
-    private void Relayout_Click(object sender, RoutedEventArgs e)
-    {
-        foreach (var t in _schema.Tables) { t.X = double.NaN; t.Y = double.NaN; }
-        _canvas.Render(_schema);
-        _userZoomed = false;
-        FitToView();
-    }
-
-    private void Fit_Click(object sender, RoutedEventArgs e) { _userZoomed = false; FitToView(); }
-
-    private void ZoomIn_Click(object sender, RoutedEventArgs e) { _userZoomed = true; Zoom(1.25); }
-    private void ZoomOut_Click(object sender, RoutedEventArgs e) { _userZoomed = true; Zoom(1 / 1.25); }
-    private void ZoomReset_Click(object sender, RoutedEventArgs e) { _userZoomed = true; CanvasHost.ChangeView(null, null, 1f); }
-
-    private void Zoom(double factor)
-    {
-        float z = (float)Math.Clamp(CanvasHost.ZoomFactor * factor,
-            CanvasHost.MinZoomFactor, CanvasHost.MaxZoomFactor);
-        CanvasHost.ChangeView(null, null, z);
-    }
-
-    private void FitToView()
-    {
-        var size = _canvas.ContentSize;
-        if (size.Width <= 0 || size.Height <= 0) return;
-        if (CanvasHost.ViewportWidth <= 0 || CanvasHost.ViewportHeight <= 0) return;
-        double zw = CanvasHost.ViewportWidth / size.Width;
-        double zh = CanvasHost.ViewportHeight / size.Height;
-        float zoom = (float)Math.Clamp(Math.Min(zw, zh), CanvasHost.MinZoomFactor, CanvasHost.MaxZoomFactor);
-        if (zoom <= 0 || float.IsNaN(zoom)) zoom = CanvasHost.MinZoomFactor;
-        CanvasHost.ChangeView(0, 0, zoom);
-    }
-
-    private void UpdateZoomText()
-    {
-        if (ZoomText is not null) ZoomText.Text = $"{CanvasHost.ZoomFactor * 100:0}%";
     }
 
     private void ExportSchema_Click(object sender, RoutedEventArgs e)
