@@ -82,6 +82,12 @@ public static class SchemaExport
         return (dbmlPath, sqlPath);
     }
 
+    /// <summary>Item → material edges (trade key, material name, optional mix key). Direct or via a mix.</summary>
+    public static IReadOnlyList<(string Trade, string MaterialName, string ViaMix)> ItemMaterialEdges() =>
+        TradeMaterials
+            .Select(e => (e.Trade, Materials.FirstOrDefault(m => m.Key == e.Material)?.Name ?? e.Material, e.ViaMix))
+            .ToList();
+
     /// <summary>The full ERD as DBML — paste into dbdiagram.io (New Diagram → Import → DBML).</summary>
     public static string BuildDbml()
     {

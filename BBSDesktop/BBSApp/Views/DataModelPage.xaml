@@ -13,49 +13,49 @@
         </Grid.RowDefinitions>
 
         <Grid>
-            <StackPanel Spacing="2" MaxWidth="720" HorizontalAlignment="Left">
-                <TextBlock Text="Item relationships (ERD)" Style="{StaticResource PageTitleStyle}"/>
+            <StackPanel Spacing="2" MaxWidth="700" HorizontalAlignment="Left">
+                <TextBlock Text="Item relationships" Style="{StaticResource PageTitleStyle}"/>
                 <TextBlock Style="{StaticResource PageSubtitleStyle}"
-                           Text="How estimation items relate — item → sub-item (masonry → plaster → paint) and item → material (concrete → cement + aggregates). Drag boxes to arrange; scroll to pan; Ctrl+scroll or pinch to zoom; click an entity to highlight its links."/>
+                           Text="Each item with its unit and rate, what feeds it (inputs — source items + materials) and what it produces (outputs — derived items). Masonry → plaster → paint; concrete → cement + aggregates."/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="{StaticResource SpacingS}"
                         HorizontalAlignment="Right" VerticalAlignment="Center">
-                <ComboBox x:Name="ViewCombo" MinWidth="170" VerticalAlignment="Center"
+                <ComboBox x:Name="ViewCombo" MinWidth="150" VerticalAlignment="Center"
                           SelectionChanged="ViewCombo_SelectionChanged"
-                          AutomationProperties.Name="Relationship view">
-                    <ComboBoxItem Content="Both mappings" Tag="both" IsSelected="True"/>
-                    <ComboBoxItem Content="Item → sub-item" Tag="derivation"/>
-                    <ComboBoxItem Content="Item → material" Tag="composition"/>
+                          AutomationProperties.Name="View">
+                    <ComboBoxItem Content="Items" Tag="items" IsSelected="True"/>
+                    <ComboBoxItem Content="Schema diagram" Tag="diagram"/>
                 </ComboBox>
-                <Button Content="&#x2212;" Style="{StaticResource SecondaryButtonStyle}" MinWidth="40"
-                        Click="ZoomOut_Click" AutomationProperties.Name="Zoom out"
-                        ToolTipService.ToolTip="Zoom out"/>
-                <TextBlock x:Name="ZoomText" Text="100%" Width="52" TextAlignment="Center"
-                           VerticalAlignment="Center"
-                           ToolTipService.ToolTip="Current zoom"/>
-                <Button Content="+" Style="{StaticResource SecondaryButtonStyle}" MinWidth="40"
-                        Click="ZoomIn_Click" AutomationProperties.Name="Zoom in"
-                        ToolTipService.ToolTip="Zoom in"/>
-                <Button Content="100%" Style="{StaticResource SecondaryButtonStyle}"
-                        Click="ZoomReset_Click" AutomationProperties.Name="Reset zoom to actual size"
-                        ToolTipService.ToolTip="Actual size (100%)"/>
-                <Button Content="Re-layout" Style="{StaticResource SecondaryButtonStyle}"
-                        Click="Relayout_Click" AutomationProperties.Name="Auto-arrange the diagram"/>
-                <Button Content="Fit" Style="{StaticResource SecondaryButtonStyle}"
-                        Click="Fit_Click" AutomationProperties.Name="Fit the diagram to the window"/>
+                <StackPanel x:Name="DiagramTools" Orientation="Horizontal" Visibility="Collapsed"
+                            Spacing="{StaticResource SpacingS}">
+                    <Button Content="&#x2212;" Style="{StaticResource SecondaryButtonStyle}" MinWidth="40"
+                            Click="ZoomOut_Click" AutomationProperties.Name="Zoom out"/>
+                    <TextBlock x:Name="ZoomText" Text="100%" Width="52" TextAlignment="Center"
+                               VerticalAlignment="Center"/>
+                    <Button Content="+" Style="{StaticResource SecondaryButtonStyle}" MinWidth="40"
+                            Click="ZoomIn_Click" AutomationProperties.Name="Zoom in"/>
+                    <Button Content="100%" Style="{StaticResource SecondaryButtonStyle}"
+                            Click="ZoomReset_Click" AutomationProperties.Name="Reset zoom to actual size"/>
+                    <Button Content="Re-layout" Style="{StaticResource SecondaryButtonStyle}"
+                            Click="Relayout_Click" AutomationProperties.Name="Auto-arrange the diagram"/>
+                    <Button Content="Fit" Style="{StaticResource SecondaryButtonStyle}"
+                            Click="Fit_Click" AutomationProperties.Name="Fit the diagram to the window"/>
+                </StackPanel>
                 <Button Content="Export ERD" Style="{StaticResource SecondaryButtonStyle}"
-                        Click="ExportSchema_Click" AutomationProperties.Name="Export the ERD as DBML and SQL"/>
+                        Click="ExportSchema_Click" AutomationProperties.Name="Export the ERD as DBML and SQL"
+                        ToolTipService.ToolTip="Regenerate the logical ERD (aqc-core.dbml + .sql) for dbdiagram.io."/>
             </StackPanel>
         </Grid>
 
-        <InfoBar x:Name="Info" Grid.Row="1" IsOpen="True" IsClosable="False"
-                 Severity="Informational"/>
+        <InfoBar x:Name="Info" Grid.Row="1" IsOpen="True" IsClosable="False" Severity="Informational"/>
 
-        <ScrollViewer x:Name="CanvasHost" Grid.Row="2"
-                      Margin="-16,0,-16,-12"
-                      Background="#1E2128"
-                      ZoomMode="Enabled" MinZoomFactor="0.3" MaxZoomFactor="3"
-                      HorizontalScrollMode="Enabled" VerticalScrollMode="Enabled"
-                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"/>
+        <Grid Grid.Row="2">
+            <Border x:Name="TableHost" Style="{StaticResource FluentCardStyle}" Padding="8"/>
+            <ScrollViewer x:Name="CanvasHost" Visibility="Collapsed"
+                          Margin="-16,0,-16,-12" Background="#1E2128"
+                          ZoomMode="Enabled" MinZoomFactor="0.3" MaxZoomFactor="3"
+                          HorizontalScrollMode="Enabled" VerticalScrollMode="Enabled"
+                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"/>
+        </Grid>
     </Grid>
 </Page>

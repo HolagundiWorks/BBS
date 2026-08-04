@@ -11,96 +11,77 @@ namespace BBSApp.Views;
 
 public sealed partial class DataModelPage : Page
 {
+    private readonly ResultTable _itemTable = new();
     private readonly ErdCanvas _canvas = new();
     private ErdSchema _schema = new();
-    private string _view = "both";
-
     private bool _userZoomed;
+    private bool _diagramReady;
 
     public DataModelPage()
     {
         InitializeComponent();
+        _itemTable.SetAutomationName("Item relationships");
+        TableHost.Child = _itemTable;
         CanvasHost.Content = _canvas;
-        _canvas.SelectionChanged += OnSelectionChanged;
-        // Keep the diagram framed to the window until the user takes zoom control.
         CanvasHost.SizeChanged += (_, _) =>
         {
-            if (!_userZoomed && CanvasHost.ViewportWidth > 0) FitToView();
+            if (Diagram && !_userZoomed && CanvasHost.ViewportWidth > 0) FitToView();
         };
         CanvasHost.ViewChanged += (_, _) => UpdateZoomText();
         Loaded += OnLoaded;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        LoadView();
-        // The '*' row / page-in transition resolves the viewport size over a few frames, so re-fit a
-        // handful of times as it settles (stops early once the user takes zoom control).
-        int ticks = 0;
-        var timer = DispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromMilliseconds(150);
-        timer.IsRepeating = true;
-        timer.Tick += (_, _) =>
-        {
-            if (!_userZoomed) FitToView();
-            if (++ticks >= 6 || _userZoomed) timer.Stop();
-        };
-        timer.Start();
-    }
+    private bool Diagram => (ViewCombo.SelectedItem as ComboBoxItem)?.Tag as string == "diagram";
+
+    private void OnLoaded(object sender, RoutedEventArgs e) => ShowItems();
 
     private void ViewCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!IsLoaded) return; // ignore the initial selection during XAML init
-        _userZoomed = false;
-        LoadView();
-        FitToView();
+        if (!IsLoaded) return;
+        if (Diagram) ShowDiagram();
+        else ShowItems();
     }
 
-    private void LoadView()
-    {
-        _view = (ViewCombo?.SelectedItem as ComboBoxItem)?.Tag as string ?? "both";
-        _schema = SchemaModel.FromExport();
-        IEnumerable<string> keep = _view switch
-        {
-            "derivation" => SchemaModel.DerivationTables,
-            "composition" => SchemaModel.CompositionTables,
-            _ => SchemaModel.DerivationTables.Concat(SchemaModel.CompositionTables)
-        };
-        SchemaModel.RetainTables(_schema, keep);
-        _canvas.Render(_schema);
-        ShowStats();
-    }
+    // ── Items table ──────────────────────────────────────────────────────────
 
-    private void ShowStats()
+    private void ShowItems()
     {
-        int cols = _schema.Tables.Sum(t => t.Columns.Count);
-        string scope = _view switch
-        {
-            "derivation" => "Item → sub-item (derivation): trade → link_rule → derived_item.",
-            "composition" => "Item → material (composition): trade / mix_design → material.",
-            _ => "Item → sub-item (trade → link_rule → derived_item) and item → material (trade / mix_design → material)."
-        };
+        TableHost.Visibility = Visibility.Visible;
+        CanvasHost.Visibility = Visibility.Collapsed;
+        DiagramTools.Visibility = Visibility.Collapsed;
+
+        var rows = ItemRelations.Build();
+        _itemTable.SetTable(
+            new[] { "Item", "UOM", "Rate", "Inputs", "Outputs" },
+            rows.Select(r => (IReadOnlyList<string>)new[] { r.Item, r.Uom, r.Rate, r.Inputs, r.Outputs }).ToList());
+
+        var ver = RateBookStore.Current.ActiveOrFirst();
         Info.Title = "Item relationships";
-        Info.Message = $"{_schema.Tables.Count} entities · {cols} columns · {_schema.Relations.Count} relationships. {scope}";
+        Info.Message = $"{rows.Count} items · unit, rate, inputs (source items + materials) and outputs (derived items)."
+                     + (ver is not null ? $" Rates from “{ver.Name}”." : " No rate book loaded.");
         Info.Severity = InfoBarSeverity.Informational;
     }
 
-    private void OnSelectionChanged(string? table)
+    // ── Schema diagram ───────────────────────────────────────────────────────
+
+    private void ShowDiagram()
     {
-        if (table is null || _schema.Find(table) is not { } t) { ShowStats(); return; }
-        var outward = _schema.Relations
-            .Where(r => r.FromTable.Equals(t.Name, StringComparison.OrdinalIgnoreCase))
-            .Select(r => $"{r.FromColumn} → {r.ToTable}");
-        var inward = _schema.Relations
-            .Where(r => r.ToTable.Equals(t.Name, StringComparison.OrdinalIgnoreCase))
-            .Select(r => $"{r.FromTable}.{r.FromColumn}");
-        string refs = string.Join(", ", outward);
-        string usedBy = string.Join(", ", inward);
-        Info.Title = $"{t.Name} · {t.Columns.Count} columns";
-        Info.Message =
-            (refs.Length > 0 ? $"References: {refs}. " : "")
-            + (usedBy.Length > 0 ? $"Referenced by: {usedBy}." : "")
-            + (refs.Length == 0 && usedBy.Length == 0 ? "No foreign keys." : "");
+        TableHost.Visibility = Visibility.Collapsed;
+        CanvasHost.Visibility = Visibility.Visible;
+        DiagramTools.Visibility = Visibility.Visible;
+
+        if (!_diagramReady)
+        {
+            _schema = SchemaModel.FromExport();
+            _canvas.Render(_schema);
+            _diagramReady = true;
+        }
+        _userZoomed = false;
+        FitToView();
+
+        int cols = _schema.Tables.Sum(t => t.Columns.Count);
+        Info.Title = "Schema diagram";
+        Info.Message = $"Full logical schema — {_schema.Tables.Count} entities · {cols} columns · {_schema.Relations.Count} foreign keys.";
         Info.Severity = InfoBarSeverity.Informational;
     }
 
@@ -125,11 +106,6 @@ public sealed partial class DataModelPage : Page
         CanvasHost.ChangeView(null, null, z);
     }
 
-    private void UpdateZoomText()
-    {
-        if (ZoomText is not null) ZoomText.Text = $"{CanvasHost.ZoomFactor * 100:0}%";
-    }
-
     private void FitToView()
     {
         var size = _canvas.ContentSize;
@@ -140,6 +116,11 @@ public sealed partial class DataModelPage : Page
         float zoom = (float)Math.Clamp(Math.Min(zw, zh), CanvasHost.MinZoomFactor, CanvasHost.MaxZoomFactor);
         if (zoom <= 0 || float.IsNaN(zoom)) zoom = CanvasHost.MinZoomFactor;
         CanvasHost.ChangeView(0, 0, zoom);
+    }
+
+    private void UpdateZoomText()
+    {
+        if (ZoomText is not null) ZoomText.Text = $"{CanvasHost.ZoomFactor * 100:0}%";
     }
 
     private void ExportSchema_Click(object sender, RoutedEventArgs e)
