@@ -126,10 +126,13 @@ public sealed class AormsBridge : IDisposable
                 // Envelope aligned with hub MetaEventBody — fields refined as wire freezes.
                 var envelope = new Dictionary<string, object?>
                 {
+                    ["stream"] = "firm",
                     ["entity"] = row.Entity,
                     ["entityId"] = row.EntityId,
                     ["op"] = row.Op,
-                    ["payload"] = JsonSerializer.Deserialize<JsonElement>(row.PayloadJson),
+                    ["patch"] = JsonSerializer.Deserialize<JsonElement>(row.PayloadJson),
+                    ["updatedAt"] = DateTime.UtcNow.ToString("O"),
+                    ["conflict"] = "lwwField",
                 };
                 req.Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json");
                 using var res = await _http.SendAsync(req, ct).ConfigureAwait(false);
@@ -158,8 +161,10 @@ public sealed class AormsBridge : IDisposable
                 {
                     ["entity"] = row.Entity,
                     ["entityId"] = row.EntityId,
-                    ["contentHash"] = row.Hash,
+                    ["op"] = "UPSERT",
                     ["payload"] = JsonSerializer.Deserialize<JsonElement>(row.PayloadJson),
+                    ["fileKeys"] = Array.Empty<string>(),
+                    ["contentHash"] = row.Hash,
                 };
                 req.Content = new StringContent(JsonSerializer.Serialize(envelope), Encoding.UTF8, "application/json");
                 using var res = await _http.SendAsync(req, ct).ConfigureAwait(false);
@@ -187,3 +192,4 @@ public sealed class AormsBridge : IDisposable
         _db.Dispose();
     }
 }
+
