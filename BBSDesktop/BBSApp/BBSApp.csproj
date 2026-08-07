@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
@@ -12,8 +12,8 @@
     <Company>Human Centric Works</Company>
     <Product>AQC-Core</Product>
     <Authors>Human Centric Works, Hospet</Authors>
-    <Description>AQC-Core (Accelerated Quantity and Costing Core) — quantity take-off and costing for RCC, masonry, plaster, PCC and earthwork by Human Centric Works, Hospet.</Description>
-    <Copyright>Copyright © 2026 Human Centric Works, Hospet</Copyright>
+    <Description>AQC-Core (Accelerated Quantity and Costing Core) â€” quantity take-off and costing for RCC, masonry, plaster, PCC and earthwork by Human Centric Works, Hospet.</Description>
+    <Copyright>Copyright Â© 2026 Human Centric Works, Hospet</Copyright>
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
@@ -103,4 +103,9 @@
     </PropertyGroup>
     <Copy SourceFiles="$(_EngineDll)" DestinationFolder="$(_EngineDest)" SkipUnchangedFiles="true" Condition="Exists('$(_EngineDll)')" />
   </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aorms.Bridge\Aorms.Bridge.csproj" />
+  </ItemGroup>
 </Project>
+

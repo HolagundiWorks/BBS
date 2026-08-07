@@ -101,3 +101,13 @@ Ordered roughly by value-to-effort.
   risk, and it keeps the hand-entry flows intact.
 - **Build environment.** The app is C# WinUI 3 + a C++ engine and builds on
   Windows only (see the README for the build steps).
+
+---
+
+## AORMS hub bridge (D2) — in progress
+
+Shared `Aorms.Bridge` library under `BBSDesktop/Aorms.Bridge`:
+local `firm.db` (org_settings · meta_outbox · artifact_outbox) + activate/Flush
+against AORMS HUB-API. See [AORMS-BRIDGE.md](AORMS-BRIDGE.md).
+Open source; SaaS commercial licensing deferred.
+AStudio / AConsulting will consume this package after the smoke.
