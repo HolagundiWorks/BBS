@@ -186,6 +186,39 @@ public sealed class AormsBridge : IDisposable
         return new FlushResult { MetaSent = metaSent, ArtifactsSent = artSent };
     }
 
+    /// <summary>POST /api/ops/tasks — suite Mongo ops (practice manager Tasks module).</summary>
+    public async Task PublishOpsTaskAsync(
+        string projectId,
+        string taskId,
+        string title,
+        string status,
+        CancellationToken ct = default)
+    {
+        var cfg = HubConfigured();
+        if (!cfg.SyncReady)
+            throw new InvalidOperationException(cfg.HasSyncToken ? "hub_unconfigured" : "missing_sync_token");
+
+        var (syncToken, hubUrl, _) = _db.ReadAuth();
+        var hub = (hubUrl ?? cfg.HubUrl).TrimEnd('/');
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{hub}/api/ops/tasks");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", syncToken);
+        var body = new Dictionary<string, object?>
+        {
+            ["projectId"] = projectId,
+            ["taskId"] = taskId,
+            ["title"] = title,
+            ["status"] = status,
+            ["updatedAt"] = DateTime.UtcNow.ToString("O"),
+        };
+        req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+        using var res = await _http.SendAsync(req, ct).ConfigureAwait(false);
+        var text = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+            throw new HttpRequestException($"PublishOpsTask failed {(int)res.StatusCode}: {text}");
+
+        _db.UpsertLocalTask(taskId, projectId, title, status, "PUBLISHED");
+    }
+
     public void Dispose()
     {
         _http.Dispose();

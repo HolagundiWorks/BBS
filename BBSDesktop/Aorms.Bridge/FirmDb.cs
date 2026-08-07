@@ -73,6 +73,14 @@ public sealed class FirmDb : IDisposable
               stream TEXT PRIMARY KEY,
               last_seq INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS local_tasks(
+              task_id TEXT PRIMARY KEY,
+              project_id TEXT NOT NULL,
+              title TEXT NOT NULL,
+              status TEXT NOT NULL,
+              publish_state TEXT NOT NULL DEFAULT 'LOCAL',
+              updated_at TEXT NOT NULL
+            );
             """;
         cmd.ExecuteNonQuery();
     }
@@ -195,6 +203,39 @@ public sealed class FirmDb : IDisposable
         cmd.Parameters.AddWithValue("$e", (object?)error ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
+    }
+
+    public void UpsertLocalTask(string taskId, string projectId, string title, string status, string publishState)
+    {
+        using var cmd = _con.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO local_tasks(task_id, project_id, title, status, publish_state, updated_at)
+            VALUES($id,$p,$t,$s,$ps,$u)
+            ON CONFLICT(task_id) DO UPDATE SET
+              project_id=excluded.project_id,
+              title=excluded.title,
+              status=excluded.status,
+              publish_state=excluded.publish_state,
+              updated_at=excluded.updated_at
+            """;
+        cmd.Parameters.AddWithValue("$id", taskId);
+        cmd.Parameters.AddWithValue("$p", projectId);
+        cmd.Parameters.AddWithValue("$t", title);
+        cmd.Parameters.AddWithValue("$s", status);
+        cmd.Parameters.AddWithValue("$ps", publishState);
+        cmd.Parameters.AddWithValue("$u", DateTime.UtcNow.ToString("O"));
+        cmd.ExecuteNonQuery();
+    }
+
+    public IReadOnlyList<(string TaskId, string ProjectId, string Title, string Status, string PublishState)> ListLocalTasks()
+    {
+        using var cmd = _con.CreateCommand();
+        cmd.CommandText = "SELECT task_id, project_id, title, status, publish_state FROM local_tasks ORDER BY updated_at DESC LIMIT 100";
+        using var r = cmd.ExecuteReader();
+        var list = new List<(string, string, string, string, string)>();
+        while (r.Read())
+            list.Add((r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4)));
+        return list;
     }
 
     public void Dispose() => _con.Dispose();
