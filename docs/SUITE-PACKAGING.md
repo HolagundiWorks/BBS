@@ -1,16 +1,16 @@
 ﻿# AQC three-app packaging (suite)
 
-**Status:** Scaffold · **Updated:** 2026-08-07  
-**Canon:** esti `docs/esti/AORMS-SUITE.md`
+**Status:** Scaffold · **Updated:** 2026-08-08  
+**Canon:** esti `docs/esti/AORMS-SUITE.md` · `docs/esti/DESKTOP-REPOS.md`
 
-| Installer | Project | Role |
+| Installer | In-tree (AQC SoT) | Product repo |
 | --- | --- | --- |
-| AQC Estimation | `BBSDesktop/AQC.Estimation` | BOQ / rate books / measurement |
-| AQC BBS | `BBSDesktop/AQC.BBS` | Bar bending / steel recon |
-| AQC Project Management | `BBSDesktop/AQC.PM` | Programme / packages / RA (AProc) |
+| AQC Estimation | `BBSDesktop/AQC.Estimation` | [AQC-Estimation](https://github.com/HolagundiWorks/AQC-Estimation) |
+| AQC BBS | `BBSDesktop/AQC.BBS` | [AQC-BBS](https://github.com/HolagundiWorks/AQC-BBS) |
+| AQC Project Management | `BBSDesktop/AQC.PM` | [AQC-PM](https://github.com/HolagundiWorks/AQC-PM) |
 
-All ProjectReference `Aorms.Bridge` and will share `bbs_engine` (same as BBSApp).
-`BBSApp` remains the reference UI until domain screens are split into these shells.
+**This repo (AQC)** remains the engine SoT: `bbs_engine`, `Aorms.Bridge`, reference `BBSApp`.
+Product repos pin AQC as a submodule and own installer identity / domain UI.
 
 ```bat
 dotnet run --project BBSDesktop\AQC.Estimation -c Release
@@ -18,4 +18,4 @@ dotnet run --project BBSDesktop\AQC.BBS -c Release
 dotnet run --project BBSDesktop\AQC.PM -c Release
 ```
 
-MSIX identities and WinUI forks are follow-on work (D6 / suite S3).
+MSIX identities and WinUI domain screens are follow-on work.
