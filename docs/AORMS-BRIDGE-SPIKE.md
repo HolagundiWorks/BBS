@@ -1,23 +1,23 @@
-﻿# AQC → AORMS bridge spike (D2 tracker)
+# AQC → AORMS bridge spike (D2 tracker)
 
-**Status:** Docs ✅ · Code scaffold 🚧 · Open source (SaaS licensing deferred)
+**Status:** Code ✅ on AQC `main` · Hub activate smoke 🚧  
+**Updated:** 2026-08-07
 
 ## Checklist
 
-- [x] Add `docs/AORMS-BRIDGE.md`
-- [x] Scaffold `BBSDesktop/Aorms.Bridge` (FirmDb + Activate + Flush)
-- [x] Wire `ProjectReference` from BBSApp + `AormsBridgeHost`
-- [ ] Migrate / dual-write `.bbsproj` ↔ firm outbox on publish actions
-- [ ] Smoke: activate → syncToken → Flush against hub
-- [ ] Extract package for AStudio / AConsulting
-- [ ] Tag baseline commit for forks
+- [x] `docs/AORMS-BRIDGE.md` ([PR #4](https://github.com/HolagundiWorks/AQC/pull/4))  
+- [x] `BBSDesktop/Aorms.Bridge` FirmDb · Activate · Flush ([PR #5](https://github.com/HolagundiWorks/AQC/pull/5))  
+- [x] Wire envelopes = `MetaEventBody` / `SyncIngestBody`  
+- [x] Local outbox smoke (Flush skips with `missing_sync_token` without activate)  
+- [ ] Hub smoke with real licence → `syncToken` → Flush meta accepted  
+- [ ] Package for AStudio / AConsulting (see ENGINE-PIN)  
+- [ ] Tag AQC baseline for forks  
 
-## Build
+## Local smoke
 
 ```bat
 cd BBSDesktop
-dotnet build Aorms.Bridge\Aorms.Bridge.csproj -c Release
-dotnet build BBSApp\BBSApp.csproj -c Release -p:Platform=x64
+dotnet run --project Aorms.Bridge.Smoke -c Release
 ```
 
-Env for smoke: `ESTI_LICENSE_API_URL`, `ESTI_HUB_URL`, `ESTI_PRODUCT_API_KEY`, `INSTALL_ID`.
+Expect `skipped=missing_sync_token` until activate.
