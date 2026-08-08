@@ -34,6 +34,24 @@ public sealed class HubConfigured
     public bool SyncReady { get; init; }
 }
 
+/// <summary>
+/// Local licence snapshot for AORMS Connect Licence Manager (C3).
+/// Not a full admin.aorms.in console — status + paths only.
+/// </summary>
+public sealed class LicenceSnapshot
+{
+    public string InstallId { get; init; } = "";
+    public string? LicenceStatus { get; init; }
+    public bool HasLicenseToken { get; init; }
+    public bool HasSyncToken { get; init; }
+    public string HubUrl { get; init; } = "";
+    public string LicenseApiUrl { get; init; } = "";
+    public string? UpdatedAt { get; init; }
+    public bool SessionFilePresent { get; init; }
+    public string SessionPath { get; init; } = "";
+    public string FirmDbPath { get; init; } = "";
+}
+
 public sealed class FlushResult
 {
     public int MetaSent { get; init; }

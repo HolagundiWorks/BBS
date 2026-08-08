@@ -62,6 +62,41 @@ public sealed class AormsBridge : IDisposable
         };
     }
 
+    /// <summary>Local licence status for Connect Licence Manager (C3).</summary>
+    public LicenceSnapshot LicenceSnapshot()
+    {
+        var (installId, licenseToken, sync, hub, licenseApi, status, updatedAt) = _db.ReadLicenceRow();
+        var hubUrl = string.IsNullOrWhiteSpace(hub) ? _opt.HubUrl.TrimEnd('/') : hub!;
+        var licApi = string.IsNullOrWhiteSpace(licenseApi)
+            ? _opt.LicenseApiUrl.TrimEnd('/')
+            : licenseApi!.TrimEnd('/');
+        var sessionPath = ConnectSession.DefaultPath();
+        var inferredStatus = status;
+        if (string.IsNullOrWhiteSpace(inferredStatus))
+            inferredStatus = string.IsNullOrWhiteSpace(sync) ? "UNBOUND" : "ACTIVE";
+
+        return new LicenceSnapshot
+        {
+            InstallId = string.IsNullOrWhiteSpace(installId) ? (_opt.DeviceId ?? "") : installId,
+            LicenceStatus = inferredStatus,
+            HasLicenseToken = !string.IsNullOrWhiteSpace(licenseToken),
+            HasSyncToken = !string.IsNullOrWhiteSpace(sync),
+            HubUrl = hubUrl,
+            LicenseApiUrl = licApi,
+            UpdatedAt = updatedAt,
+            SessionFilePresent = File.Exists(sessionPath),
+            SessionPath = sessionPath,
+            FirmDbPath = _db.DbPath,
+        };
+    }
+
+    public void ClearLocalLicence()
+    {
+        _db.ClearAuthTokens();
+        var path = ConnectSession.DefaultPath();
+        if (File.Exists(path)) File.Delete(path);
+    }
+
     /// <summary>POST /platform/v1/activate — persists licenseToken + syncToken.</summary>
     public async Task<ActivateResult> ActivateAsync(string licenseKey, CancellationToken ct = default)
     {

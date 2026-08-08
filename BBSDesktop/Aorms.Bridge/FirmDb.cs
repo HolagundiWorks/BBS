@@ -14,14 +14,17 @@ public sealed class FirmDb : IDisposable
 {
     private readonly SqliteConnection _con;
 
+    public string DbPath { get; }
+
     public FirmDb(string dbPath)
     {
-        var dir = Path.GetDirectoryName(dbPath);
+        DbPath = Path.GetFullPath(dbPath);
+        var dir = Path.GetDirectoryName(DbPath);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         SQLitePCL.Batteries_V2.Init();
         _con = new SqliteConnection(new SqliteConnectionStringBuilder
         {
-            DataSource = dbPath,
+            DataSource = DbPath,
             Mode = SqliteOpenMode.ReadWriteCreate,
         }.ToString());
         _con.Open();
@@ -126,6 +129,50 @@ public sealed class FirmDb : IDisposable
             r.IsDBNull(0) ? null : r.GetString(0),
             r.IsDBNull(1) ? null : r.GetString(1),
             r.IsDBNull(2) ? "" : r.GetString(2));
+    }
+
+    /// <summary>Full org_settings row for Connect Licence Manager (C3).</summary>
+    public (
+        string InstallId,
+        string? LicenseToken,
+        string? SyncToken,
+        string? HubUrl,
+        string? LicenseApiUrl,
+        string? LicenceStatus,
+        string? UpdatedAt
+    ) ReadLicenceRow()
+    {
+        using var cmd = _con.CreateCommand();
+        cmd.CommandText = """
+            SELECT install_id, license_token, sync_token, hub_url, license_api_url, licence_status, updated_at
+            FROM org_settings WHERE id=1
+            """;
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) return ("", null, null, null, null, null, null);
+        return (
+            r.IsDBNull(0) ? "" : r.GetString(0),
+            r.IsDBNull(1) ? null : r.GetString(1),
+            r.IsDBNull(2) ? null : r.GetString(2),
+            r.IsDBNull(3) ? null : r.GetString(3),
+            r.IsDBNull(4) ? null : r.GetString(4),
+            r.IsDBNull(5) ? null : r.GetString(5),
+            r.IsDBNull(6) ? null : r.GetString(6));
+    }
+
+    /// <summary>Clear hub tokens locally (does not call License Manager revoke).</summary>
+    public void ClearAuthTokens()
+    {
+        using var cmd = _con.CreateCommand();
+        cmd.CommandText = """
+            UPDATE org_settings SET
+              license_token=NULL,
+              sync_token=NULL,
+              licence_status='UNBOUND',
+              updated_at=$u
+            WHERE id=1
+            """;
+        cmd.Parameters.AddWithValue("$u", DateTime.UtcNow.ToString("O"));
+        cmd.ExecuteNonQuery();
     }
 
     public long EnqueueMeta(string entity, string entityId, object payload, string op = "UPSERT")
