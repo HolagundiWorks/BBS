@@ -37,6 +37,16 @@ public sealed class AormsBridge : IDisposable
 
     public FirmDb Db => _db;
 
+    /// <summary>
+    /// Import AORMS Connect session.json into this firm.db (C2 SSO).
+    /// </summary>
+    public bool TryImportConnectSession(string? sessionPath = null, bool overwrite = false) =>
+        ConnectSession.TryApplyToFirmDb(
+            _db,
+            string.IsNullOrWhiteSpace(_opt.DeviceId) ? "device" : _opt.DeviceId,
+            sessionPath ?? ConnectSession.ResolvePath(),
+            overwrite);
+
     public HubConfigured HubConfigured()
     {
         var (sync, hub, _) = _db.ReadAuth();
